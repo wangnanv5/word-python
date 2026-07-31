@@ -13,7 +13,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import relationship
 
-from database import Base
+from word_back.database import Base
 
 
 class User(Base):
@@ -25,16 +25,16 @@ class User(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
 
     # 电话号码，唯一
-    phone = Column(String(20), unique=True, nullable=False, index=True)
+    phone = Column(String(20), unique=True, nullable=True, index=True)
 
     # 不要存明文密码，要存密码哈希
     password_hash = Column(String(255), nullable=False)
 
     # 邮箱，唯一
-    email = Column(String(120), unique=True, nullable=False, index=True)
+    email = Column(String(120), unique=True, nullable=True, index=True)
 
     # 姓名
-    name = Column(String(50), nullable=False)
+    username = Column(String(50), nullable=False)
 
     # 昵称，可选
     nickname = Column(String(50), nullable=True)
@@ -68,7 +68,7 @@ class User(Base):
     )
 
     def __repr__(self):
-        return f"<User id={self.id} name={self.name}>"
+        return f"<User id={self.id} username={self.username}>"
 
 
 class WordBook(Base):
@@ -92,7 +92,7 @@ class WordBook(Base):
     )
 
     # 单词本名称
-    name = Column(String(100), nullable=False)
+    username = Column(String(100), nullable=False)
 
     # 类别：dictionary / vocabulary
     category = Column(
@@ -136,7 +136,7 @@ class WordBook(Base):
         ),
         UniqueConstraint(
             "user_id",
-            "name",
+            "username",
             "category",
             name="uq_word_books_user_name_category"
         ),
@@ -148,7 +148,7 @@ class WordBook(Base):
     )
 
     def __repr__(self):
-        return f"<WordBook id={self.id} name={self.name} category={self.category}>"
+        return f"<WordBook id={self.id} username={self.username} category={self.category}>"
 
 
 class Word(Base):

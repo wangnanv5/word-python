@@ -1,25 +1,35 @@
 from datetime import datetime
-from typing import Optional, List, Literal
-
 from pydantic import BaseModel, Field, EmailStr, ConfigDict
+from typing import Generic, Optional, TypeVar,Literal
 
+T = TypeVar("T")
+
+class HttpResponse(BaseModel, Generic[T]):
+    """
+    统一响应结构，对应前端 interface HttpResponse<T>
+    """
+    code: int = 0          # 0 表示成功，其他表示失败
+    data: Optional[T] = None
+    message: str = ""
+
+    model_config = ConfigDict(from_attributes=True)
 
 # =====================
 # 用户相关
 # =====================
 
 class UserBase(BaseModel):
-    phone: str = Field(
-        ...,
-        min_length=11,
-        max_length=11,
-        pattern=r"^1[3-9]\d{9}$",
-        description="中国大陆手机号"
-    )
+    # phone: str = Field(
+    #     ...,
+    #     min_length=11,
+    #     max_length=11,
+    #     pattern=r"^1[3-9]\d{9}$",
+    #     description="中国大陆手机号"
+    # )
 
-    email: EmailStr
+    # email: EmailStr
 
-    name: str = Field(
+    username: str = Field(
         ...,
         min_length=1,
         max_length=50,
@@ -36,7 +46,7 @@ class UserBase(BaseModel):
 class UserCreate(UserBase):
     password: str = Field(
         ...,
-        min_length=6,
+        min_length=1,
         max_length=128,
         description="密码，至少 6 位"
     )
@@ -50,7 +60,7 @@ class UserOut(UserBase):
 
 
 class LoginRequest(BaseModel):
-    phone: str = Field(
+    phoneNumber: str = Field(
         ...,
         min_length=11,
         max_length=11,

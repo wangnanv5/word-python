@@ -1,5 +1,6 @@
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta,timezone
+
 from typing import Optional
 
 from jose import jwt, JWTError
@@ -9,8 +10,8 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 
-from database import get_db
-from models import User
+from word_back.database import get_db
+from word_back.models import User
 
 
 # 生产环境一定要改成环境变量
@@ -45,9 +46,9 @@ def create_access_token(
     创建 JWT access token
     """
     if expires_delta:
-        expire = datetime.utcnow() + expires_delta
+        expire = datetime.now(timezone.utc) + expires_delta
     else:
-        expire = datetime.utcnow() + timedelta(
+        expire = datetime.now(timezone.utc) + timedelta(
             minutes=ACCESS_TOKEN_EXPIRE_MINUTES
         )
 

@@ -12,7 +12,6 @@ engine = create_engine(
     echo=False
 )
 
-
 # SQLite 配置
 @event.listens_for(engine, "connect")
 def set_sqlite_pragma(dbapi_connection,connection_record):

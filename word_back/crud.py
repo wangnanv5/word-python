@@ -3,7 +3,7 @@ from datetime import datetime
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 from pwdlib import PasswordHash
-from models import User, WordBook, Word, BookWord
+from word_back.models import User, WordBook, Word, BookWord
 
 
 # 密码加密工具
@@ -16,10 +16,10 @@ pwd_context = PasswordHash.recommended()
 
 def create_user(
     db: Session,
-    phone: str,
-    password: str,
-    email: str,
-    name: str,
+    phone: str | None = None,
+    password: str | None = None,
+    email: str | None = None,
+    username: str | None = None,
     nickname: str | None = None,
     avatar_url: str | None = None
 ) -> User:
@@ -32,7 +32,7 @@ def create_user(
         phone=phone,
         password_hash=password_hash,
         email=email,
-        name=name,
+        username=username,
         nickname=nickname,
         avatar_url=avatar_url
     )
@@ -323,7 +323,7 @@ def review_word(
         return None
 
     book_word.review_count += 1
-    book_word.last_review_at = datetime.utcnow()
+    book_word.last_review_at = datetime.now(timezone.utc)
 
     if mastery_level is not None:
         book_word.mastery_level = mastery_level
@@ -345,7 +345,7 @@ def get_due_review_words(
     查询某个单词本中到期需要复习的单词
     """
     if now is None:
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
 
     return (
         db.query(Word)

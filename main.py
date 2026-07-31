@@ -5,11 +5,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
 
-from database import get_db
+from word_back.database import get_db
 
-from models import User, WordBook
+from word_back.models import User, WordBook
 
-from crud import (
+from word_back.crud import (
     create_user,
     get_user_by_phone,
     create_word_book,
@@ -23,9 +23,10 @@ from crud import (
     get_book_word
 )
 
-from schemas import (
+from word_back.schemas import (
     UserCreate,
     UserOut,
+    HttpResponse,
     LoginRequest,
     Token,
     WordBookCreate,
@@ -36,7 +37,7 @@ from schemas import (
     BookWordOut
 )
 
-from auth import (
+from word_back.auth import (
     create_access_token,
     verify_password,
     get_current_user
@@ -99,32 +100,22 @@ def register(payload: UserCreate, db: Session = Depends(get_db)):
         db.query(User)
         .filter(
             or_(
-                User.phone == payload.phone,
-                User.email == payload.email
+                User.username == payload.username
             )
         )
         .first()
     )
 
     if exists:
-        if exists.phone == payload.phone:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="手机号已注册"
-            )
-
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="邮箱已注册"
+            detail="用户名已注册"
         )
 
     user = create_user(
         db=db,
-        phone=payload.phone,
         password=payload.password,
-        email=payload.email,
-        name=payload.name,
-        nickname=payload.nickname
+        username=payload.username,
     )
 
     return user
@@ -369,3 +360,8 @@ def create_and_add_word_to_book(
     add_word_to_book(db, book_id, word.id)
 
     return word
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("main:app", host="0.0.0.0", port=5777, reload=True)
+    # uvicorn main:app --host 0.0.0.0 --port 8000 --workers 4
