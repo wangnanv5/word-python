@@ -1,5 +1,5 @@
+import time
 from typing import List
-
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
@@ -11,7 +11,7 @@ from word_back.models import User, WordBook
 
 from word_back.crud import (
     create_user,
-    get_user_by_phone,
+    get_user_by_username,
     create_word_book,
     get_word_books_by_user,
     get_word_book_by_id,
@@ -88,66 +88,34 @@ def get_user_book_or_404(db: Session,book_id: int,user_id: int) -> WordBook:
 
 @app.post(
     "/api/auth/register",
-    response_model=UserOut,
+    response_model=HttpResponse,
     status_code=status.HTTP_201_CREATED,
-    tags=["认证"]
+    tags=["注册"]
 )
 def register(payload: UserCreate, db: Session = Depends(get_db)):
-    """
-    用户注册
-    """
-    exists = (
-        db.query(User)
-        .filter(
-            or_(
-                User.username == payload.username
-            )
-        )
-        .first()
-    )
+    exists = (db.query(User).filter( or_(User.username == payload.username)).first())
 
     if exists:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="用户名已注册"
-        )
+        return HttpResponse(code=status.HTTP_400_BAD_REQUEST,data=None, message="用户名已注册")
 
-    user = create_user(
-        db=db,
-        password=payload.password,
-        username=payload.username,
-    )
+    create_user(db=db,password=payload.password,username=payload.username)
 
-    return user
+    return HttpResponse(code=0, data=None, message="注册成功")
 
 
 @app.post(
     "/api/auth/login",
-    response_model=Token,
-    tags=["认证"]
+    response_model=HttpResponse[Token],
+    tags=["登录"]
 )
 def login(payload: LoginRequest, db: Session = Depends(get_db)):
-    """
-    用户登录
-
-    返回 JWT token。
-    前端之后请求需要携带：
-
-    Authorization: Bearer <token>
-    """
-    user = get_user_by_phone(db, payload.phone)
+    user = get_user_by_username(db, payload.username)
 
     if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="手机号或密码错误"
-        )
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,detail="此用户名未注册")
 
     if not verify_password(payload.password, user.password_hash):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="手机号或密码错误"
-        )
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,detail="密码错误")
 
     access_token = create_access_token(user.id)
 

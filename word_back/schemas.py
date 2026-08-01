@@ -33,7 +33,7 @@ class UserBase(BaseModel):
         ...,
         min_length=1,
         max_length=50,
-        description="姓名"
+        description="用户名"
     )
 
     nickname: Optional[str] = Field(
@@ -44,6 +44,29 @@ class UserBase(BaseModel):
 
 
 class UserCreate(UserBase):
+    # phone: str = Field(
+    #     ...,
+    #     min_length=11,
+    #     max_length=11,
+    #     pattern=r"^1[3-9]\d{9}$",
+    #     description="中国大陆手机号"
+    # )
+
+    # email: EmailStr
+
+    username: str = Field(
+        ...,
+        min_length=1,
+        max_length=50,
+        description="用户名"
+    )
+
+    nickname: Optional[str] = Field(
+        None,
+        max_length=50,
+        description="昵称"
+    )
+
     password: str = Field(
         ...,
         min_length=1,
@@ -53,31 +76,31 @@ class UserCreate(UserBase):
 
 
 class UserOut(UserBase):
-    id: int
     is_active: bool
-
     model_config = ConfigDict(from_attributes=True)
 
 
 class LoginRequest(BaseModel):
-    phoneNumber: str = Field(
+    username: str = Field(
         ...,
-        min_length=11,
-        max_length=11,
-        pattern=r"^1[3-9]\d{9}$"
+        min_length=1,
+        max_length=50,
+        description="用户名"
     )
 
     password: str = Field(
         ...,
-        min_length=6,
-        max_length=128
+        min_length=1,
+        max_length=128,
+        description="密码，至少 6 位"
     )
 
 
 class Token(BaseModel):
-    access_token: str
-    token_type: str = "bearer"
-    user: UserOut
+    access_token: str = Field(alias="accessToken")
+    model_config = ConfigDict(validate_by_name=True,validate_by_alias=True)
+    # token_type: str = "bearer"
+    # user: UserOut
 
 
 # =====================

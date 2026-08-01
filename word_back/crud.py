@@ -60,6 +60,15 @@ def get_user_by_phone(db: Session, phone: str) -> User | None:
         .first()
     )
 
+def get_user_by_username(db: Session, username: str) -> User | None:
+    """
+    根据用户名查询用户
+    """
+    return (
+        db.query(User)
+        .filter(User.username == username)
+        .first()
+    )
 
 def verify_password(plain_password: str, password_hash: str) -> bool:
     """
