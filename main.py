@@ -25,10 +25,10 @@ from word_back.crud import (
 
 from word_back.schemas import (
     UserCreate,
-    UserOut,
     HttpResponse,
     LoginRequest,
     Token,
+    UserInfo,
     WordBookCreate,
     WordBookOut,
     WordCreate,
@@ -86,12 +86,7 @@ def get_user_book_or_404(db: Session,book_id: int,user_id: int) -> WordBook:
 # 认证接口
 # =====================
 
-@app.post(
-    "/api/auth/register",
-    response_model=HttpResponse,
-    status_code=status.HTTP_201_CREATED,
-    tags=["注册"]
-)
+@app.post("/api/auth/register",response_model=HttpResponse,status_code=status.HTTP_201_CREATED,tags=["注册"])
 def register(payload: UserCreate, db: Session = Depends(get_db)):
     exists = (db.query(User).filter( or_(User.username == payload.username)).first())
 
@@ -103,11 +98,7 @@ def register(payload: UserCreate, db: Session = Depends(get_db)):
     return HttpResponse(code=0, data=None, message="注册成功")
 
 
-@app.post(
-    "/api/auth/login",
-    response_model=HttpResponse[Token],
-    tags=["登录"]
-)
+@app.post("/api/auth/login",response_model=HttpResponse[Token],tags=["登录"])
 def login(payload: LoginRequest, db: Session = Depends(get_db)):
     user = get_user_by_username(db, payload.username)
 
@@ -119,26 +110,22 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
 
     access_token = create_access_token(user.id)
 
-    return {
-        "access_token": access_token,
-        "token_type": "bearer",
-        "user": user
-    }
+    return HttpResponse(code=0, data={"accessToken":access_token}, message="登录成功")
 
+@app.post("/api/auth/logout", tags=["退出登录"])
+def logout():
+    return HttpResponse(code=0, data=None, message="登录成功")
 
-@app.get(
-    "/api/users/me",
-    response_model=UserOut,
-    tags=["用户"]
+@app.get("/api/user/info", 
+         response_model=HttpResponse,
+          tags=["获取用户信息"]
 )
-def get_current_user_info(
-    current_user: User = Depends(get_current_user)
-):
-    """
-    获取当前登录用户信息
-    """
-    return current_user
-
+def get_user_info():
+    user_info = UserInfo(
+        roles=["super"],
+        realName = "小王"
+    )
+    return HttpResponse(data=user_info.model_dump())
 
 # =====================
 # 单词本接口
@@ -331,5 +318,5 @@ def create_and_add_word_to_book(
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=5777, reload=True)
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
     # uvicorn main:app --host 0.0.0.0 --port 8000 --workers 4

@@ -1,6 +1,6 @@
 from datetime import datetime
 from pydantic import BaseModel, Field, EmailStr, ConfigDict
-from typing import Generic, Optional, TypeVar,Literal
+from typing import Generic, Optional, TypeVar,Literal,List, Optional, Union
 
 T = TypeVar("T")
 
@@ -18,32 +18,8 @@ class HttpResponse(BaseModel, Generic[T]):
 # 用户相关
 # =====================
 
-class UserBase(BaseModel):
-    # phone: str = Field(
-    #     ...,
-    #     min_length=11,
-    #     max_length=11,
-    #     pattern=r"^1[3-9]\d{9}$",
-    #     description="中国大陆手机号"
-    # )
-
-    # email: EmailStr
-
-    username: str = Field(
-        ...,
-        min_length=1,
-        max_length=50,
-        description="用户名"
-    )
-
-    nickname: Optional[str] = Field(
-        None,
-        max_length=50,
-        description="昵称"
-    )
-
-
-class UserCreate(UserBase):
+# 注册用户
+class UserCreate(BaseModel):
     # phone: str = Field(
     #     ...,
     #     min_length=11,
@@ -74,12 +50,7 @@ class UserCreate(UserBase):
         description="密码，至少 6 位"
     )
 
-
-class UserOut(UserBase):
-    is_active: bool
-    model_config = ConfigDict(from_attributes=True)
-
-
+# 用户登录
 class LoginRequest(BaseModel):
     username: str = Field(
         ...,
@@ -95,7 +66,26 @@ class LoginRequest(BaseModel):
         description="密码，至少 6 位"
     )
 
+# 用户信息
+class UserInfo(BaseModel):
+    # —— BasicUserInfo 基础字段 ——
+    roles: List[str] = []
+    real_name: str = Field(alias="realName")
+    # 上面是必须要的字段，下面是可选字段
+    # userId: Union[str, int]
+    # userName: str
+    # nickName: Optional[str] = None
+    # avatar: Optional[str] = None
+    # permissions: List[str] = []
 
+    # —— 你扩展的字段 ——
+    # desc: str            # 用户描述
+    # homePath: str        # 首页地址
+    # token: str           # accessToken
+    model_config = ConfigDict(validate_by_name=True,validate_by_alias=True)
+
+
+# 登录返回
 class Token(BaseModel):
     access_token: str = Field(alias="accessToken")
     model_config = ConfigDict(validate_by_name=True,validate_by_alias=True)
