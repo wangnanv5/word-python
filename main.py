@@ -86,7 +86,8 @@ def get_user_book_or_404(db: Session,book_id: int,user_id: int) -> WordBook:
 # 认证接口
 # =====================
 
-@app.post("/api/auth/register",response_model=HttpResponse,status_code=status.HTTP_201_CREATED,tags=["注册"])
+# 注册
+@app.post("/api/auth/register",response_model=HttpResponse,status_code=status.HTTP_201_CREATED)
 def register(payload: UserCreate, db: Session = Depends(get_db)):
     exists = (db.query(User).filter( or_(User.username == payload.username)).first())
 
@@ -98,7 +99,8 @@ def register(payload: UserCreate, db: Session = Depends(get_db)):
     return HttpResponse(code=0, data=None, message="注册成功")
 
 
-@app.post("/api/auth/login",response_model=HttpResponse[Token],tags=["登录"])
+# 登录
+@app.post("/api/auth/login",response_model=HttpResponse[Token])
 def login(payload: LoginRequest, db: Session = Depends(get_db)):
     user = get_user_by_username(db, payload.username)
 
@@ -112,39 +114,26 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
 
     return HttpResponse(code=0, data={"accessToken":access_token}, message="登录成功")
 
-@app.post("/api/auth/logout", tags=["退出登录"])
+
+# 退出登录
+@app.post("/api/auth/logout")
 def logout():
     return HttpResponse(code=0, data=None, message="登录成功")
 
-@app.get("/api/user/info", 
-         response_model=HttpResponse,
-          tags=["获取用户信息"]
-)
+
+# 获取用户信息
+@app.get("/api/user/info", response_model=HttpResponse)
 def get_user_info():
-    user_info = UserInfo(
-        roles=["super"],
-        realName = "小王"
-    )
+    user_info = UserInfo(roles=["super"],realName = "小王")
     return HttpResponse(data=user_info.model_dump())
 
 # =====================
 # 单词本接口
 # =====================
-
-@app.post(
-    "/api/word-books",
-    response_model=WordBookOut,
-    status_code=status.HTTP_201_CREATED,
-    tags=["单词本"]
-)
-def create_book(
-    payload: WordBookCreate,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """
-    创建单词本
-    """
+    
+# 创建单词本
+@app.post("/api/word-books",response_model=WordBookOut,status_code=status.HTTP_201_CREATED)
+def create_book(payload: WordBookCreate,db: Session = Depends(get_db),current_user: User = Depends(get_current_user)):
     book = create_word_book(
         db=db,
         user_id=current_user.id,

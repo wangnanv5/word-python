@@ -1,0 +1,48 @@
+{
+  "word": "talk",
+  "us": "tɔk",
+  "uk": "tɔːk",
+  "translations": [
+    {
+      "translation": "说话；谈话",
+      "type": "v"
+    },
+    {
+      "translation": "交谈",
+      "type": "n"
+    }
+  ],
+  "phrases": [
+    {
+      "phrase": "talk about",
+      "translation": "谈论某事"
+    },
+    {
+      "phrase": "talk to oneself",
+      "translation": "自言自语"
+    },
+    {
+      "phrase": "talk with",
+      "translation": "与…交谈"
+    },
+    {
+      "phrase": "talk of",
+      "translation": "谈论，议论；谈到，说到"
+    },
+    {
+      "phrase": "talk on",
+      "translation": "继续谈"
+    },
+    {
+      "phrase": "talk show",
+      "translation": "脱口秀；访谈节目"
+    },
+    {
+      "phrase": "let's talk",
+      "translation": "大学英语基础口语教程"
+    },
+    {
+      "phrase": "talking of",
+      "translation": "谈到"
+    }]
+}
