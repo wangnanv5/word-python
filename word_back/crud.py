@@ -154,9 +154,7 @@ def create_word(
     part_of_speech: str = "",
     example_sentence: str | None = None,
     example_translation: str | None = None,
-    difficulty: int = 1,
-    is_public: bool = False,
-    owner_id: int | None = None
+    difficulty: int = 1
 ) -> Word:
     """
     创建单词
@@ -170,8 +168,6 @@ def create_word(
         example_sentence=example_sentence,
         example_translation=example_translation,
         difficulty=difficulty,
-        is_public=is_public,
-        owner_id=owner_id
     )
 
     db.add(word)

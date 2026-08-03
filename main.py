@@ -218,7 +218,6 @@ def create_word_endpoint(
         example_sentence=payload.example_sentence,
         example_translation=payload.example_translation,
         difficulty=payload.difficulty,
-        is_public=payload.is_public,
         owner_id=current_user.id
     )
 
@@ -297,7 +296,6 @@ def create_and_add_word_to_book(
             example_sentence=payload.example_sentence,
             example_translation=payload.example_translation,
             difficulty=payload.difficulty,
-            is_public=payload.is_public,
             owner_id=current_user.id
         )
 

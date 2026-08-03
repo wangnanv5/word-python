@@ -9,13 +9,24 @@ from sqlalchemy import (
     ForeignKey,
     UniqueConstraint,
     Index,
-    CheckConstraint
+    CheckConstraint,
 )
 from sqlalchemy.orm import relationship
 
 from word_back.database import Base
 
 
+# ============================================================
+# 工具函数
+# ============================================================
+def _utcnow():
+    """统一返回带时区的 UTC 当前时间，避免 default 值不一致"""
+    return datetime.now(timezone.utc)
+
+
+# ============================================================
+# 用户表
+# ============================================================
 class User(Base):
     """
     用户表
@@ -24,93 +35,158 @@ class User(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
 
-    # 电话号码，唯一
     phone = Column(String(20), unique=True, nullable=True, index=True)
-
-    # 不要存明文密码，要存密码哈希
     password_hash = Column(String(255), nullable=False)
-
-    # 邮箱，唯一
     email = Column(String(120), unique=True, nullable=True, index=True)
-
-    # 用户名 -> 用于登录
     username = Column(String(50), nullable=False)
-
-    # 昵称，可选
     nickname = Column(String(50), nullable=True)
-
-    # 头像地址，可选
     avatar_url = Column(String(255), nullable=True)
-
-    # 是否激活
     is_active = Column(Boolean, default=True, nullable=False)
 
-    created_at = Column(DateTime, default=datetime.now(timezone.utc), nullable=False)
-    updated_at = Column(
-        DateTime,
-        default=datetime.now(timezone.utc),
-        onupdate=datetime.now(timezone.utc),
-        nullable=False
-    )
+    created_at = Column(DateTime, default=_utcnow, nullable=False)
+    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow, nullable=False)
 
-    # 一个用户有多个单词本
+    # 用户私有单词本（不含系统词典）
     word_books = relationship(
         "WordBook",
         back_populates="user",
-        cascade="all, delete-orphan"
+        cascade="all, delete-orphan",
     )
 
     def __repr__(self):
         return f"<User id={self.id} username={self.username}>"
 
 
+# ============================================================
+# 用户私有单词本表
+# ============================================================
 class WordBook(Base):
     """
-    单词本表
+    用户私有单词本表
+    只存放用户自己创建的单词本（dictionary / vocabulary 类别均在此）
+    系统全局词典不在此表中，见 SystemDictionary
     """
     __tablename__ = "word_books"
 
-    # 单词本类别常量
-    CATEGORY_DICTIONARY = "dictionary"      # 词典
-    CATEGORY_VOCABULARY = "vocabulary"      # 生词本
+    CATEGORY_DICTIONARY = "dictionary"
+    CATEGORY_VOCABULARY = "vocabulary"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
 
-    # 外键：关联用户
     user_id = Column(
         Integer,
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
-        index=True
+        index=True,
     )
 
-    # 单词本名称
-    username = Column(String(100), nullable=False)
+    # 注意：字段名原本叫 username，实际存的是单词本名称，改名为 name 更语义化
+    name = Column(String(100), nullable=False)
 
-    # 类别：dictionary / vocabulary
-    category = Column(String(20),nullable=False,default=CATEGORY_VOCABULARY)
+    category = Column(String(20), nullable=False, default=CATEGORY_DICTIONARY)
 
-    # 描述
     description = Column(Text, nullable=True)
 
-    created_at = Column(DateTime, default=datetime.now(timezone.utc), nullable=False)
-    updated_at = Column(DateTime,default=datetime.now(timezone.utc),onupdate=datetime.now(timezone.utc),nullable=False)
+    created_at = Column(DateTime, default=_utcnow, nullable=False)
+    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow, nullable=False)
 
-    # 一个单词本属于一个用户
-    user = relationship("User",back_populates="word_books")
+    user = relationship("User", back_populates="word_books")
+    book_words = relationship(
+        "BookWord",
+        back_populates="book",
+        cascade="all, delete-orphan",
+    )
 
-    # 一个单词本包含多个 book_words 记录
-    book_words = relationship("BookWord",back_populates="book",cascade="all, delete-orphan")
-
-    __table_args__ = (CheckConstraint("category IN ('dictionary', 'vocabulary')",name="ck_word_books_category"),
-        UniqueConstraint("user_id","username","category",name="uq_word_books_user_name_category"),
-        Index("ix_word_books_user_category","user_id","category")
+    __table_args__ = (
+        CheckConstraint(
+            "category IN ('dictionary', 'vocabulary')",
+            name="ck_word_books_category",
+        ),
+        # (user_id, name) 已能唯一标识一个用户的单词本，category 去掉以减少索引宽度
+        UniqueConstraint("user_id", "name", name="uq_word_books_user_name"),
+        Index("ix_word_books_user_category", "user_id", "category"),
     )
 
     def __repr__(self):
-        return f"<WordBook id={self.id} username={self.username} category={self.category}>"
+        return f"<WordBook id={self.id} name={self.name} category={self.category}>"
 
 
+# ============================================================
+# 系统全局词典（新增）
+# ============================================================
+class SystemDictionary(Base):
+    """
+    系统默认词典（全局唯一 / 全局共享）
+    不属于任何用户，所有用户登录后都能看到
+    """
+    __tablename__ = "system_dictionary"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+
+    name = Column(String(100), nullable=False, default="系统词典")
+    description = Column(Text, nullable=True)
+
+    # 版本号：方便后续做词典热更新 / 增量同步
+    version = Column(Integer, default=1, nullable=False)
+
+    created_at = Column(DateTime, default=_utcnow, nullable=False)
+    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow, nullable=False)
+
+    # 反向关系
+    entries = relationship(
+        "SystemDictionaryWord",
+        back_populates="dictionary",
+        cascade="all, delete-orphan",
+    )
+
+    def __repr__(self):
+        return f"<SystemDictionary id={self.id} name={self.name} version={self.version}>"
+
+
+class SystemDictionaryWord(Base):
+    """
+    系统词典中的单词关联表
+    一条记录 = 系统词典包含一个单词
+    """
+    __tablename__ = "system_dictionary_words"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+
+    dictionary_id = Column(
+        Integer,
+        ForeignKey("system_dictionary.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+
+    word_id = Column(
+        Integer,
+        ForeignKey("words.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+
+    created_at = Column(DateTime, default=_utcnow, nullable=False)
+
+    dictionary = relationship("SystemDictionary", back_populates="entries")
+    word = relationship("Word")
+
+    __table_args__ = (
+        UniqueConstraint(
+            "dictionary_id", "word_id",
+            name="uq_sys_dict_dictionary_word",
+        ),
+        # 覆盖索引：按单词查所属词典
+        Index("ix_sys_dict_word_dictionary", "word_id", "dictionary_id"),
+    )
+
+    def __repr__(self):
+        return f"<SystemDictionaryWord dict_id={self.dictionary_id} word_id={self.word_id}>"
+
+
+# ============================================================
+# 单词主表
+# ============================================================
 class Word(Base):
     """
     单词表
@@ -119,41 +195,44 @@ class Word(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
 
-    # 英语拼写
     spelling = Column(String(100), nullable=False, index=True)
-
-    # 音标
-    us = Column(String(100), nullable=True)
-    uk = Column(String(100), nullable=True)
-
-    # 读音存储位置（文件路径 / URL / 对象存储地址）
+    us = Column(String(100), nullable=True)   # 美式音标
+    uk = Column(String(100), nullable=True)   # 英式音标
     audio_url = Column(String(255), nullable=True)
 
-    # 英文例句
-    example_sentence = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=_utcnow, nullable=False)
+    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow, nullable=False)
 
-    # 例句翻译
-    example_translation = Column(Text, nullable=True)
+    translations = relationship(
+        "WordTranslation",
+        back_populates="word",
+        cascade="all, delete-orphan",
+    )
+    phrases = relationship(
+        "WordPhrase",
+        back_populates="word",
+        cascade="all, delete-orphan",
+    )
+    book_words = relationship(
+        "BookWord",
+        back_populates="word",
+        cascade="all, delete-orphan",
+    )
 
-
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
-    updated_at = Column(DateTime,default=lambda: datetime.now(timezone.utc),onupdate=lambda: datetime.now(timezone.utc),nullable=False)
-
-    # 一个单词对应多条释义
-    translations = relationship("WordTranslation",back_populates="word",cascade="all, delete-orphan")
-
-    # 一个单词对应多条短语
-    phrases = relationship("WordPhrase",back_populates="word",cascade="all, delete-orphan")
-
-    # 一个单词可以出现在多个单词本中
-    book_words = relationship("BookWord",back_populates="word",cascade="all, delete-orphan")
-
-    __table_args__ = (Index("ix_words_spelling_public", "spelling"))
+    __table_args__ = (
+        # 唯一约束：拼写全局唯一，避免重复单词
+        UniqueConstraint("spelling", name="uq_words_spelling"),
+        # 复合索引：按拼写前缀模糊搜索时加速（B-Tree 对 LIKE 'abc%' 有效）
+        Index("ix_words_spelling_created", "spelling", "created_at"),
+    )
 
     def __repr__(self):
         return f"<Word id={self.id} spelling={self.spelling!r}>"
 
-# -------------------- 单词释义表 --------------------
+
+# ============================================================
+# 单词释义表
+# ============================================================
 class WordTranslation(Base):
     """
     单词释义表
@@ -163,118 +242,109 @@ class WordTranslation(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
 
-    word_id = Column(Integer,ForeignKey("words.id", ondelete="CASCADE"),nullable=False,index=True)
+    word_id = Column(
+        Integer,
+        ForeignKey("words.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
 
-    # 词性，例如 v / n / adj / adv
     part_of_speech = Column(String(20), nullable=False, default="")
-
-    # 中文释义
     translation = Column(Text, nullable=False)
 
     word = relationship("Word", back_populates="translations")
 
-    __table_args__ = (UniqueConstraint("word_id", "part_of_speech", "translation",name="uq_translation_word_pos_text"))
+    __table_args__ = (
+        UniqueConstraint(
+            "word_id", "part_of_speech", "translation",
+            name="uq_translation_word_pos_text",
+        ),
+        # 新增：按词性查询时加速（如"只查名词释义"）
+        Index("ix_translations_word_pos", "word_id", "part_of_speech"),
+    )
 
     def __repr__(self):
-        return (f"<WordTranslation word_id={self.word_id} "f"pos={self.part_of_speech!r} text={self.translation[:20]!r}>")
+        return (
+            f"<WordTranslation word_id={self.word_id} "
+            f"pos={self.part_of_speech!r} text={self.translation[:20]!r}>"
+        )
 
-# -------------------- 短语搭配表 --------------------
+
+# ============================================================
+# 短语搭配表
+# ============================================================
 class WordPhrase(Base):
     """
     短语搭配表
-    存放某个单词相关的短语及其中文翻译
     """
     __tablename__ = "word_phrases"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
 
-    word_id = Column(Integer,ForeignKey("words.id", ondelete="CASCADE"),nullable=False,index=True)
+    word_id = Column(
+        Integer,
+        ForeignKey("words.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
 
     phrase = Column(String(255), nullable=False)
-
     translation = Column(Text, nullable=True)
 
     word = relationship("Word", back_populates="phrases")
 
-    __table_args__ = (UniqueConstraint("word_id", "phrase", name="uq_phrase_word_text"))
+    __table_args__ = (
+        UniqueConstraint("word_id", "phrase", name="uq_phrase_word_text"),
+        # 新增：按短语内容搜索时加速
+        Index("ix_phrases_phrase", "phrase"),
+    )
 
     def __repr__(self):
         return f"<WordPhrase word_id={self.word_id} phrase={self.phrase!r}>"
 
+
+# ============================================================
+# 单词本-单词关联表
+# ============================================================
 class BookWord(Base):
     """
-    单词本-单词关联表
-
-    作用：
-    1. 表示某个单词属于某个单词本
-    2. 记录该单词在这个单词本里的学习状态
+    用户单词本中的单词记录
+    可在此扩展复习算法字段（如 sm-2 间隔重复）
     """
     __tablename__ = "book_words"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
 
-    # 外键：关联单词本
     book_id = Column(
         Integer,
         ForeignKey("word_books.id", ondelete="CASCADE"),
         nullable=False,
-        index=True
+        index=True,
     )
-
-    # 外键：关联单词
     word_id = Column(
         Integer,
         ForeignKey("words.id", ondelete="CASCADE"),
         nullable=False,
-        index=True
+        index=True,
     )
 
-    # 掌握程度
-    # 0：未学习
-    # 1：学习中
-    # 2：熟悉
-    # 3：掌握
-    # 你也可以扩展成 0 到 5
-    mastery_level = Column(Integer, default=0, nullable=False)
+    created_at = Column(DateTime, default=_utcnow, nullable=False)
 
-    # 复习次数
+    # ---- 复习算法预留字段 ----
+    next_review_at = Column(DateTime, nullable=True, index=True)
     review_count = Column(Integer, default=0, nullable=False)
+    ease_factor = Column(Integer, default=250, nullable=False)  # *100 存储，避免浮点
 
-    # 上次复习时间
-    last_review_at = Column(DateTime, nullable=True)
-
-    # 下次复习时间
-    next_review_at = Column(DateTime, nullable=True)
-
-    # 加入单词本时间
-    created_at = Column(DateTime, default=datetime.now(timezone.utc), nullable=False)
-
-    # 关系
-    book = relationship(
-        "WordBook",
-        back_populates="book_words"
-    )
-
-    word = relationship(
-        "Word",
-        back_populates="book_words"
-    )
+    book = relationship("WordBook", back_populates="book_words")
+    word = relationship("Word", back_populates="book_words")
 
     __table_args__ = (
-        CheckConstraint(
-            "mastery_level BETWEEN 0 AND 5",
-            name="ck_book_words_mastery_level"
-        ),
-        UniqueConstraint(
-            "book_id",
-            "word_id",
-            name="uq_book_words_book_word"
-        ),
+        UniqueConstraint("book_id", "word_id", name="uq_book_words_book_word"),
+        # 复习队列查询：(book_id, next_review_at) 覆盖索引
         Index(
-            "ix_book_words_book_next_review",
-            "book_id",
-            "next_review_at"
-        )
+            "ix_book_words_review_queue",
+            "book_id", "next_review_at", "word_id",
+        ),
     )
 
     def __repr__(self):

@@ -184,11 +184,6 @@ class WordBase(BaseModel):
         description="难度，1 到 5"
     )
 
-    is_public: bool = Field(
-        default=False,
-        description="是否公共单词"
-    )
-
 
 class WordCreate(WordBase):
     pass
