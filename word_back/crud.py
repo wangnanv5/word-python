@@ -3,7 +3,7 @@ from datetime import datetime
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 from pwdlib import PasswordHash
-from word_back.models import User, WordBook, Word, BookWord
+from word_back.models import User, WordBook, Word, BookWord,SystemDictionary,SystemDictionaryWord
 
 
 # 密码加密工具
@@ -13,7 +13,7 @@ pwd_context = PasswordHash.recommended()
 # =====================
 # 用户相关
 # =====================
-
+# 新用户会自动获得一个单词本，包含所有单词
 def create_user(
     db: Session,
     phone: str | None = None,
@@ -26,8 +26,12 @@ def create_user(
     """
     创建用户
     """
+    if not password:
+        raise ValueError("password is required")
+
     password_hash = pwd_context.hash(password)
 
+    # 1. 创建用户
     user = User(
         phone=phone,
         password_hash=password_hash,
@@ -36,10 +40,46 @@ def create_user(
         nickname=nickname,
         avatar_url=avatar_url
     )
-
     db.add(user)
+    db.flush()  # 拿到 user.id，不提交事务
+
+    # 2. 创建默认单词本（生词本 / 词典）
+    default_book = WordBook(
+        user_id=user.id,
+        name=f"{username or '默认'}的单词本",
+        category=WordBook.CATEGORY_VOCABULARY,
+        description="系统词典副本（物理复制）"
+    )
+    db.add(default_book)
+    db.flush()  # 拿到 book_id
+
+    system_dict = db.query(SystemDictionary).first()
+    if not system_dict:
+        raise RuntimeError("系统词典不存在，请先初始化系统词典")
+
+    # 4. 批量复制系统词典单词到用户单词本
+    sys_word_ids = (
+        db.query(SystemDictionaryWord.word_id)
+        .filter(SystemDictionaryWord.dictionary_id == system_dict.id)
+        .all()
+    )
+
+    if sys_word_ids:
+        db.bulk_insert_mappings(
+            BookWord,
+            [
+                {
+                    "book_id": default_book.id,
+                    "word_id": word_id,
+                }
+                for (word_id,) in sys_word_ids
+            ]
+        )
+
+    # 5. 提交事务
     db.commit()
     db.refresh(user)
+
     return user
 
 

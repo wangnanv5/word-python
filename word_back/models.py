@@ -330,21 +330,11 @@ class BookWord(Base):
 
     created_at = Column(DateTime, default=_utcnow, nullable=False)
 
-    # ---- 复习算法预留字段 ----
-    next_review_at = Column(DateTime, nullable=True, index=True)
-    review_count = Column(Integer, default=0, nullable=False)
-    ease_factor = Column(Integer, default=250, nullable=False)  # *100 存储，避免浮点
-
     book = relationship("WordBook", back_populates="book_words")
     word = relationship("Word", back_populates="book_words")
 
     __table_args__ = (
         UniqueConstraint("book_id", "word_id", name="uq_book_words_book_word"),
-        # 复习队列查询：(book_id, next_review_at) 覆盖索引
-        Index(
-            "ix_book_words_review_queue",
-            "book_id", "next_review_at", "word_id",
-        ),
     )
 
     def __repr__(self):
