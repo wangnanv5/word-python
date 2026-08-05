@@ -76,6 +76,24 @@ def create_user(
             ]
         )
 
+    # default_book = WordBook(
+    #     user_id=user.id,
+    #     name=f"{username or '默认'}的2312单词本",
+    #     category=WordBook.CATEGORY_VOCABULARY,
+    #     description="系统词典副本（物理复制）"
+    # )
+    # db.add(default_book)
+    # db.flush()  # 拿到 book_id
+
+    # default_book = WordBook(
+    #     user_id=user.id,
+    #     name=f"{username or '默认'}的单412414词本",
+    #     category=WordBook.CATEGORY_VOCABULARY,
+    #     description="系统词典副本（物理复制）"
+    # )
+    # db.add(default_book)
+    # db.flush()  # 拿到 book_id
+
     # 5. 提交事务
     db.commit()
     db.refresh(user)

@@ -55,8 +55,8 @@ app = FastAPI(
 # 生产环境不要随便用 *，要改成你的前端域名
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=False,
+    allow_origins=["http://localhost:5777"], 
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -144,19 +144,15 @@ def create_book(payload: WordBookCreate,db: Session = Depends(get_db),current_us
     return book
 
 
-@app.get(
-    "/api/word-books",
-    response_model=List[WordBookOut],
-    tags=["单词本"]
-)
-def list_books(
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
+@app.get("/api/word-books",response_model=HttpResponse[List[WordBookOut]])
+def list_books(db: Session = Depends(get_db),current_user: User = Depends(get_current_user)):
     """
     获取当前用户的所有单词本
     """
-    return get_word_books_by_user(db, current_user.id)
+    all_books = get_word_books_by_user(db, current_user.id)
+
+    return HttpResponse(code=0,data=all_books,message="获取所有单词本成功")
+
 
 
 @app.get(

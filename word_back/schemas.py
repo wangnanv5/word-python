@@ -123,8 +123,6 @@ class WordBookCreate(WordBookBase):
 
 class WordBookOut(WordBookBase):
     id: int
-    user_id: int
-    word_count: int
     created_at: datetime
     updated_at: datetime
 
