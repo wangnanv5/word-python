@@ -1,28 +1,23 @@
-import time
-from typing import List
-from fastapi import FastAPI, Depends, HTTPException, status
+import math
+from loguru import logger
+from typing import List,Optional, Literal
+from fastapi import FastAPI, Depends, HTTPException, status,Header, Query
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
 
+from word_back.define import SYSTEM_DICTIONARY_VIRTUAL_ID
 from word_back.database import get_db
-
 from word_back.models import User, WordBook
-
 from word_back.crud import (
     create_user,
     get_user_by_username,
     create_word_book,
     get_word_books_by_user,
     get_word_book_by_id,
-    create_word,
-    get_word_by_id,
-    get_word_by_spelling,
     add_word_to_book,
-    get_words_in_book,
-    get_book_word
+    get_wordbook_words
 )
-
 from word_back.schemas import (
     UserCreate,
     HttpResponse,
@@ -31,12 +26,11 @@ from word_back.schemas import (
     UserInfo,
     WordBookCreate,
     WordBookOut,
-    WordCreate,
-    WordOut,
     AddWordToBookRequest,
-    BookWordOut
+    BookWordOut,
+    WordPageResponse,
+    PageMeta
 )
-
 from word_back.auth import (
     create_access_token,
     verify_password,
@@ -49,7 +43,6 @@ app = FastAPI(
     description="用户、单词本、单词接口",
     version="1.0.0"
 )
-
 
 # 允许跨域
 # 生产环境不要随便用 *，要改成你的前端域名
@@ -80,7 +73,6 @@ def get_user_book_or_404(db: Session,book_id: int,user_id: int) -> WordBook:
         )
 
     return book
-
 
 # =====================
 # 认证接口
@@ -127,6 +119,7 @@ def get_user_info():
     user_info = UserInfo(roles=["super"],realName = "小王")
     return HttpResponse(data=user_info.model_dump())
 
+
 # =====================
 # 单词本接口
 # =====================
@@ -143,160 +136,85 @@ def create_book(payload: WordBookCreate,db: Session = Depends(get_db),current_us
     )
     return book
 
-
+# 获取当前用户的所有单词本
 @app.get("/api/word-books",response_model=HttpResponse[List[WordBookOut]])
 def list_books(db: Session = Depends(get_db),current_user: User = Depends(get_current_user)):
-    """
-    获取当前用户的所有单词本
-    """
     all_books = get_word_books_by_user(db, current_user.id)
-
     return HttpResponse(code=0,data=all_books,message="获取所有单词本成功")
 
+# 获取某个单词本里的所有单词
+@app.get("/api/words",response_model=HttpResponse[WordPageResponse])
+def list_words(
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=100, ge=1, le=500),
+    book_id: Optional[int] = Query(default=None),
+    sort: Literal["spelling", "created_at"] = Query(default="spelling"),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    target_book_id = SYSTEM_DICTIONARY_VIRTUAL_ID if book_id is None else book_id
 
+    try:
+        user_id = user.id
+        result = get_wordbook_words(
+            db = db,
+            user_id=user_id,
+            book_id=target_book_id,
+            page=page,
+            page_size=page_size,
+            sort = sort
+        )
+    except PermissionError as e:
+        logger.error(e)
+        return HttpResponse(code=status.HTTP_403_FORBIDDEN,data=None,message="获取所有单词失败")
 
-@app.get(
-    "/api/word-books/{book_id}/words",
-    response_model=List[WordOut],
-    tags=["单词本"]
+    items = result.items
+    
+    total_pages = math.ceil(result.total / page_size) if page_size > 0 else 0
+    meta = PageMeta(
+        page=page,
+        page_size=page_size,
+        total=result.total,
+        total_pages=total_pages,
+        has_next=page < total_pages,
+        has_prev=page > 1,
+    )
+
+    word_page_response = WordPageResponse(
+        items=items,
+        meta=meta,
+    )
+
+    return HttpResponse(code=0, data=word_page_response, message="获取单词成功")
+
+# 删除单词本中的某个单词
+@app.delete(
+    "/api/word-books/{book_id}/words/{word_id}",
+    response_model=HttpResponse,
+    status_code=status.HTTP_204_NO_CONTENT,
 )
-def list_words_in_book(
+def delete_word_from_book(
     book_id: int,
+    word_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """
-    获取某个单词本里的所有单词
-    """
-    get_user_book_or_404(db, book_id, current_user.id)
+    book = get_user_book_or_404(db, book_id, current_user.id)
 
-    return get_words_in_book(db, book_id)
+    if not remove_word_from_book(db, book_id, word_id):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="单词不存在"
+        )
+
+    return HttpResponse(code=0, data=None, message="删除单词成功")
 
 
 # =====================
 # 单词接口
 # =====================
 
-@app.post(
-    "/api/words",
-    response_model=WordOut,
-    status_code=status.HTTP_201_CREATED,
-    tags=["单词"]
-)
-def create_word_endpoint(
-    payload: WordCreate,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """
-    创建单词，但不加入某个单词本
-    """
-    existing_word = get_word_by_spelling(
-        db,
-        spelling=payload.spelling,
-        part_of_speech=payload.part_of_speech
-    )
 
-    if existing_word:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="单词已存在"
-        )
-
-    word = create_word(
-        db=db,
-        spelling=payload.spelling,
-        meaning=payload.meaning,
-        phonetic=payload.phonetic,
-        audio_url=payload.audio_url,
-        part_of_speech=payload.part_of_speech,
-        example_sentence=payload.example_sentence,
-        example_translation=payload.example_translation,
-        difficulty=payload.difficulty,
-        owner_id=current_user.id
-    )
-
-    return word
-
-
-@app.post(
-    "/api/word-books/{book_id}/words",
-    response_model=BookWordOut,
-    status_code=status.HTTP_201_CREATED,
-    tags=["单词本"]
-)
-def add_existing_word_to_book(
-    book_id: int,
-    payload: AddWordToBookRequest,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """
-    把已有单词加入某个单词本
-    """
-    get_user_book_or_404(db, book_id, current_user.id)
-
-    word = get_word_by_id(db, payload.word_id)
-
-    if not word:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="单词不存在"
-        )
-
-    existing = get_book_word(db, book_id, payload.word_id)
-
-    if existing:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="单词已经在单词本里"
-        )
-
-    return add_word_to_book(db, book_id, payload.word_id)
-
-
-@app.post(
-    "/api/word-books/{book_id}/words/new",
-    response_model=WordOut,
-    status_code=status.HTTP_201_CREATED,
-    tags=["单词本"]
-)
-def create_and_add_word_to_book(
-    book_id: int,
-    payload: WordCreate,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """
-    创建新单词，并加入某个单词本。
-
-    如果单词已经存在，则直接加入单词本。
-    """
-    get_user_book_or_404(db, book_id, current_user.id)
-
-    word = get_word_by_spelling(
-        db,
-        spelling=payload.spelling,
-        part_of_speech=payload.part_of_speech
-    )
-
-    if not word:
-        word = create_word(
-            db=db,
-            spelling=payload.spelling,
-            meaning=payload.meaning,
-            phonetic=payload.phonetic,
-            audio_url=payload.audio_url,
-            part_of_speech=payload.part_of_speech,
-            example_sentence=payload.example_sentence,
-            example_translation=payload.example_translation,
-            difficulty=payload.difficulty,
-            owner_id=current_user.id
-        )
-
-    add_word_to_book(db, book_id, word.id)
-
-    return word
 
 if __name__ == "__main__":
     import uvicorn

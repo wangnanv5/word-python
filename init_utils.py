@@ -1,16 +1,18 @@
 import json
 import click
-import loguru
+from loguru import logger
 from pathlib import Path
 from typing import Iterator,Iterable
 from sqlalchemy.orm import sessionmaker,Session
-from word_back.models import Word, WordTranslation,WordPhrase,SystemDictionary,SystemDictionaryWord
-from sqlalchemy import create_engine, select, and_
+from word_back.models import Word, WordTranslation,WordPhrase,WordBook
+from sqlalchemy import select, and_
 from sqlalchemy import event
 
-from word_back.database import Base, engine
+from word_back.database import Base, engine,SessionLocal
+from word_back.crud import create_user
+from word_back.define import CATEGORY_DICTIONARY
 
-def load_words(json_path: str) -> Iterator[dict]:
+def load_words(json_path: Path) -> Iterator[dict]:
     with open(json_path, "r", encoding="utf-8") as f:
         data = json.load(f)
 
@@ -20,7 +22,7 @@ def load_words(json_path: str) -> Iterator[dict]:
     for item in data:
         yield item
 
-def import_words(json_path: str,batch_size: int = 1000):
+def import_words(json_path: Path,batch_size: int = 1000,user_id=None):
 
     # SQLite 性能优化参数
     @event.listens_for(engine, "connect")
@@ -37,6 +39,18 @@ def import_words(json_path: str,batch_size: int = 1000):
     Session = sessionmaker(bind=engine)
     session = Session()
 
+    book_name = json_path.stem
+    word_book = session.query(WordBook).filter_by(user_id=user_id, name=book_name).first()
+    if not word_book:
+        word_book = WordBook(
+            user_id=user_id,
+            name=book_name,
+            category=CATEGORY_DICTIONARY,  # 用户自建单词本通常归类为 vocabulary
+            description=f"从文件 {book_name} 导入的单词本"
+        )
+        session.add(word_book)
+        session.flush()  # 必须 flush 以获取数据库生成的 word_book.id
+
     # --- 统计计数器 ---
     stats = {
         "total": 0,        # JSON 中总单词数
@@ -47,8 +61,7 @@ def import_words(json_path: str,batch_size: int = 1000):
 
     batch_buffer = []   # 待提交的 Word 对象
 
-    print(f"正在读取: {json_path}")
-    print("-" * 60)
+    logger.log(f"正在读取: {json_path}")
 
     def flush_batch():
         """将缓冲区中的单词一次性提交"""
@@ -78,7 +91,7 @@ def import_words(json_path: str,batch_size: int = 1000):
 
             if not spelling:
                 stats["errors"] += 1
-                print(f"  ⚠️  跳过无效记录（缺少 word 字段）: {word_data}")
+                logger.log(f"  ⚠️  跳过无效记录（缺少 word 字段）: {word_data}")
                 continue
 
             # --- 去重检查 ---
@@ -116,7 +129,7 @@ def import_words(json_path: str,batch_size: int = 1000):
 
             except Exception as e:
                 stats["errors"] += 1
-                print(f"  ⚠️  解析失败 [{spelling}]: {e}")
+                logger.error(f"  ⚠️  解析失败 [{spelling}]: {e}")
                 continue
 
             # --- 达到批量阈值，提交 ---
@@ -127,7 +140,7 @@ def import_words(json_path: str,batch_size: int = 1000):
         flush_batch()
 
     except KeyboardInterrupt:
-        print("\n⚠️  用户中断，正在回滚当前批次...")
+        logger.error("\n⚠️  用户中断，正在回滚当前批次...")
         session.rollback()
         raise
 
@@ -135,71 +148,67 @@ def import_words(json_path: str,batch_size: int = 1000):
         session.close()
 
     # --- 打印统计报告 ---
-    print()
-    print("=" * 60)
-    print("📊 导入完成统计")
-    print("=" * 60)
-    print(f"  总记录数:   {stats['total']}")
-    print(f"  新插入:     {stats['inserted']}")
-    print(f"  已跳过:     {stats['skipped']}  (数据库中已存在)")
-    print(f"  失败:       {stats['errors']}")
-    print("=" * 60)
+    logger.log("📊 导入完成统计")
+    logger.log(f"  总记录数:   {stats['total']}")
+    logger.log(f"  新插入:     {stats['inserted']}")
+    logger.log(f"  已跳过:     {stats['skipped']}  (数据库中已存在)")
+    logger.log(f"  失败:       {stats['errors']}")
 
-def get_or_create_system_dictionary(session: Session) -> SystemDictionary:
-    """获取唯一的系统词典，不存在则创建"""
-    dictionary = session.execute(
-        select(SystemDictionary).limit(1)
-    ).scalar_one_or_none()
+# def get_or_create_system_dictionary(session: Session) -> SystemDictionary:
+#     """获取唯一的系统词典，不存在则创建"""
+#     dictionary = session.execute(
+#         select(SystemDictionary).limit(1)
+#     ).scalar_one_or_none()
 
-    if dictionary is None:
-        dictionary = SystemDictionary(
-            name="系统词典",
-            description="平台默认提供的全局共享词典",
-            version=1,
-        )
-        session.add(dictionary)
-        session.flush()  # 获取 id
-        print("✅ 创建系统词典 id=%s", dictionary.id)
-    else:
-        print("📖 已存在系统词典 id=%s version=%s",dictionary.id, dictionary.version)
-    return dictionary
+#     if dictionary is None:
+#         dictionary = SystemDictionary(
+#             name="系统词典",
+#             description="平台默认提供的全局共享词典",
+#             version=1,
+#         )
+#         session.add(dictionary)
+#         session.flush()  # 获取 id
+#         print("✅ 创建系统词典 id=%s", dictionary.id)
+#     else:
+#         print("📖 已存在系统词典 id=%s version=%s",dictionary.id, dictionary.version)
+#     return dictionary
 
-def add_words_to_dictionary(
-    session: Session,
-    dictionary: SystemDictionary,
-    word_ids: Iterable[int],
-) -> int:
-    """
-    将一批 word_id 加入系统词典（自动去重）
-    返回：本次新增的记录数
-    """
-    word_ids = list(set(word_ids))  # 去重
-    if not word_ids:
-        return 0
+# def add_words_to_dictionary(
+#     session: Session,
+#     dictionary: SystemDictionary,
+#     word_ids: Iterable[int],
+# ) -> int:
+#     """
+#     将一批 word_id 加入系统词典（自动去重）
+#     返回：本次新增的记录数
+#     """
+#     word_ids = list(set(word_ids))  # 去重
+#     if not word_ids:
+#         return 0
 
-    # 查询已存在的记录，避免唯一约束冲突
-    existing = session.execute(
-        select(SystemDictionaryWord.word_id).where(
-            and_(
-                SystemDictionaryWord.dictionary_id == dictionary.id,
-                SystemDictionaryWord.word_id.in_(word_ids),
-            )
-        )
-    ).scalars().all()
+#     # 查询已存在的记录，避免唯一约束冲突
+#     existing = session.execute(
+#         select(SystemDictionaryWord.word_id).where(
+#             and_(
+#                 SystemDictionaryWord.dictionary_id == dictionary.id,
+#                 SystemDictionaryWord.word_id.in_(word_ids),
+#             )
+#         )
+#     ).scalars().all()
 
-    existing_set = set(existing)
-    new_word_ids = [wid for wid in word_ids if wid not in existing_set]
+#     existing_set = set(existing)
+#     new_word_ids = [wid for wid in word_ids if wid not in existing_set]
 
-    for wid in new_word_ids:
-        session.add(SystemDictionaryWord(
-            dictionary_id=dictionary.id,
-            word_id=wid,
-        ))
+#     for wid in new_word_ids:
+#         session.add(SystemDictionaryWord(
+#             dictionary_id=dictionary.id,
+#             word_id=wid,
+#         ))
 
-    session.flush()
-    print("➕ 新增 %d 个单词到系统词典（已有 %d 个）",
-                len(new_word_ids), len(existing_set))
-    return len(new_word_ids)
+#     session.flush()
+#     print("➕ 新增 %d 个单词到系统词典（已有 %d 个）",
+#                 len(new_word_ids), len(existing_set))
+#     return len(new_word_ids)
 
 def init_from_existing_words(session: Session) -> int:
     """将 words 表中所有已有单词加入系统词典"""
@@ -232,15 +241,22 @@ def cli():
 # uv run .\init_utils.py create-db
 # @cli.command(name="create_db") 
 @cli.command()
-@click.option("--json_folder_path",default=r"D:\english-vocabulary-master\json_original\json-sentence")
-def create_db(json_folder_path):
-    # 创建空表，加载所有的单词到一个单词本中，作为词典。
+def create_db():
+    # 初始化数据库,创建空表
     Base.metadata.create_all(bind=engine)
+    db = SessionLocal()
+    create_user(db,username="admin",phone="1",password="123456",email="",nickname="管理员",role="admin")
+    click.echo(click.style(f"数据库创建成功", fg="green", bold=True))
 
+# uv run .\init_utils.py add-system-word
+# @cli.command(name="create_db") 
+@cli.command()
+@click.option("--json_folder_path",default=r"D:\english-vocabulary-master\json_original\json-sentence")
+def add_system_word(json_folder_path):
     json_file_list = [f for f in Path(json_folder_path).iterdir() if f.name.endswith(".json")]
 
     for json_file in json_file_list[2:4]:
-        print(f"正在处理文件: {json_file}")
+        logger.log(f"正在处理文件: {json_file}")
         import_words(json_file)
 
     click.echo(click.style(f"数据库创建成功", fg="green", bold=True))

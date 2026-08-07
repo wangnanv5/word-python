@@ -23,7 +23,7 @@ SECRET_KEY = os.getenv(
 ALGORITHM = "HS256"
 
 # token 有效期：24 小时
-ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24
+ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 2400
 
 
 pwd_context = PasswordHash.recommended()

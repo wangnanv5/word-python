@@ -98,23 +98,13 @@ class Token(BaseModel):
 # =====================
 
 class WordBookBase(BaseModel):
-    name: str = Field(
-        ...,
-        min_length=1,
-        max_length=100,
-        description="单词本名称"
-    )
-
+    name: str = Field( ..., min_length=1, max_length=100, description="单词本名称")
     category: Literal["dictionary", "vocabulary"] = Field(
         default="vocabulary",
         description="dictionary: 词典, vocabulary: 生词本"
     )
 
-    description: Optional[str] = Field(
-        None,
-        max_length=255,
-        description="单词本描述"
-    )
+    description: Optional[str] = Field(None,max_length=255,description="单词本描述")
 
 
 class WordBookCreate(WordBookBase):
@@ -125,75 +115,46 @@ class WordBookOut(WordBookBase):
     id: int
     created_at: datetime
     updated_at: datetime
-
     model_config = ConfigDict(from_attributes=True)
-
 
 # =====================
 # 单词相关
 # =====================
 
-class WordBase(BaseModel):
-    spelling: str = Field(
-        ...,
-        min_length=1,
-        max_length=100,
-        description="英语拼写"
-    )
-
-    meaning: str = Field(
-        ...,
-        min_length=1,
-        description="中文意思"
-    )
-
-    phonetic: Optional[str] = Field(
-        None,
-        max_length=100,
-        description="音标"
-    )
-
-    audio_url: Optional[str] = Field(
-        None,
-        max_length=255,
-        description="读音存储位置"
-    )
-
-    part_of_speech: str = Field(
-        default="",
-        max_length=20,
-        description="词性，例如 n. v. adj."
-    )
-
-    example_sentence: Optional[str] = Field(
-        None,
-        description="英文例句"
-    )
-
-    example_translation: Optional[str] = Field(
-        None,
-        description="例句翻译"
-    )
-
-    difficulty: int = Field(
-        default=1,
-        ge=1,
-        le=5,
-        description="难度，1 到 5"
-    )
-
-
-class WordCreate(WordBase):
-    pass
-
-
-class WordOut(WordBase):
-    id: int
-    owner_id: Optional[int] = None
-    created_at: datetime
-    updated_at: datetime
-
+class TranslationItem(BaseModel):
+    pos: str = Field(description="词性")
+    text: str = Field(description="中文释义")
     model_config = ConfigDict(from_attributes=True)
+
+class PhraseItem(BaseModel):
+    phrase: str = Field(description="短语")
+    translation: Optional[str] = Field(description="短语翻译")
+    model_config = ConfigDict(from_attributes=True)
+
+class WordItem(BaseModel):
+    """单个单词的完整信息"""
+    id: int
+    spelling: str = Field(description="单词拼写", example="apple")
+    us: Optional[str] = Field(description="美式音标", example="/ˈæp.əl/")
+    uk: Optional[str] = Field(description="英式音标", example="/ˈæp.əl/")
+    audio_url: Optional[str] = Field(description="发音音频地址")
+    translations: list[TranslationItem] = Field(default_factory=list, description="释义列表")
+    phrases: list[PhraseItem] = Field(default_factory=list, description="短语列表")
+    model_config = ConfigDict(from_attributes=True)
+
+class PageMeta(BaseModel):
+    """分页元信息"""
+    page: int = Field(description="当前页码（从 1 开始）")
+    page_size: int = Field(description="每页数量")
+    total: int = Field(description="总记录数")
+    total_pages: int = Field(description="总页数")
+    has_next: bool = Field(description="是否有下一页")
+    has_prev: bool = Field(description="是否有上一页")
+
+class WordPageResponse(BaseModel):
+    """分页获取单词的响应体"""
+    items: list[WordItem] = Field(description="当前页的单词列表")
+    meta: PageMeta = Field(description="分页信息")
 
 
 # =====================
