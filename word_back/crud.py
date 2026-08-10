@@ -1,7 +1,7 @@
 from typing import Optional
 from sqlalchemy import func,select,and_
 from sqlalchemy.orm import Session,selectinload
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import SQLAlchemyError,IntegrityError
 from pwdlib import PasswordHash
 
 from word_back.define import INIT_NICKNAME,CATEGORY_VOCABULARY,SYSTEM_DICTIONARY_ID,CATEGORY_DICTIONARY
@@ -72,8 +72,9 @@ def create_user(
     try:
         db.add(user)
         db.flush()  # 拿到 user.id，不提交事务
-
-        create_word_book(db, user_id=user.id,name="生词本")
+        if user.role == "super":
+            # 创建系统单词本
+            create_word_book(db, user_id=user.id,name="生词本")
 
         # 5. 提交事务
         db.commit()
@@ -226,37 +227,45 @@ def word_to_view(word: Word) -> WordItem:
     )
 
 # 获取一个单词本中的所有单词 支持分页
+# 0代表查询 is_learned为0 is_in_vocabulary:0 is_deleted:0 未学习的单词
+# 1代表查询 is_learned为1 is_in_vocabulary:0 is_deleted:0 已认识,并删除
+# 2代表查询 is_learned为1 is_in_vocabulary:1 is_deleted:0 已学习,并加入生词本
+# 3代表查询 is_learned为1 is_in_vocabulary:1 is_deleted:1 未学习,并加入生词本,并已掌握删除
 def get_wordbook_words(
     db :Session,
     user_id: int,
     book_id: int,
     page: int = 1,
     page_size: int = 20,
-    sort : str = None
+    sort : str = None,mode:int = 0
 ) -> WordPageResponse:
     """
     获取某个单词本中的单词列表（分页 + 搜索）
-    book_id = -1 表示系统词典
     """
+    if book_id is None:
+        base_stmt = (
+                select(Word).where(Word.mode == mode)
+            )
+    else:
     # ---- 用户私有单词本 ----
     # 校验权限：只能看自己的
-    book = db.execute(
-        select(WordBook).where(
-            and_(
-                WordBook.id == book_id,
-                WordBook.user_id == user_id,
+        book = db.execute(
+            select(WordBook).where(
+                and_(
+                    WordBook.id == book_id,
+                    WordBook.user_id == user_id,
+                )
             )
+        ).scalar_one_or_none()
+
+        if book is None:
+            raise PermissionError(f"单词本 {book_id} 不存在或不属于当前用户")
+
+        base_stmt = (
+            select(Word)
+            .join(BookWord, BookWord.word_id == Word.id)
+            .where(BookWord.book_id == book_id).where(Word.mode == mode)
         )
-    ).scalar_one_or_none()
-
-    if book is None:
-        raise PermissionError(f"单词本 {book_id} 不存在或不属于当前用户")
-
-    base_stmt = (
-        select(Word)
-        .join(BookWord, BookWord.word_id == Word.id)
-        .where(BookWord.book_id == book_id).where(Word.is_learned == False)
-    )
     # 排序方式
     if sort == "spelling":
         sort_by = Word.spelling
@@ -297,7 +306,56 @@ def get_wordbook_words(
 # 单词相关
 # =====================
 
-def mark_word_as_learned(session:Session, word_id: int) -> bool:
+def copy_word_to_book(
+    session: Session,
+    source_book_id: int,
+    word_id: int,
+    target_book_id: int,
+) -> None:
+    """
+    将 source_book 中的某个 word 复制进 target_book。
+
+    :raises ValueError:   源 book 与目标 book 相同
+    :raises LookupError:  源 book 中不存在该 word，或目标 book 不存在
+    """
+    # 1. 基本参数校验
+    if source_book_id == target_book_id:
+        raise ValueError("源单词本和目标单词本不能相同")
+
+    # 2. 确认源 book 中确实存在该 word
+    src_link = session.scalar(
+        select(BookWord).where(
+            BookWord.book_id == source_book_id,
+            BookWord.word_id == word_id,
+        )
+    )
+    if src_link is None:
+        raise LookupError(f"word {word_id} 不在源单词本 {source_book_id} 中")
+
+    # 3. 确认目标 book 存在
+    target_book = session.scalar(
+        select(WordBook).where(WordBook.id == target_book_id)
+    )
+    if target_book is None:
+        raise LookupError(f"目标单词本 {target_book_id} 不存在")
+
+    # 4. 幂等：目标 book 已包含该 word 则直接返回
+    existing = session.scalar(
+        select(BookWord).where(
+            BookWord.book_id == target_book_id,
+            BookWord.word_id == word_id,
+        )
+    )
+    if existing is not None:
+        return existing
+
+    # 5. 插入新关联
+    new_link = BookWord(book_id=target_book_id, word_id=word_id)
+    session.add(new_link)
+    session.commit()
+    session.refresh(new_link)
+
+def mark_word_as_mode(session:Session, word_id: int,mode :int) -> bool:
     """
     根据 word id 将该单词标记为已学习
 
@@ -309,7 +367,7 @@ def mark_word_as_learned(session:Session, word_id: int) -> bool:
     if word is None:
         return False
 
-    word.is_learned = True   # 注意字段名是 is_leared
+    word.mode = mode   # 注意字段名是 is_leared
     session.commit()
 
 def search_words(
@@ -350,6 +408,22 @@ def add_word_to_book(
     db.commit()
     db.refresh(book_word)
     return book_word
+
+def add_word_in_vocabulary(session:Session, word_id: int) -> None:
+    """
+    根据 word id 把单词标记为已学习、已加入生词本
+
+    :param session: SQLAlchemy Session
+    :param word_id: 单词 ID
+    :return: 是否成功（False 表示未找到该单词）
+    """
+    word = session.query(Word).filter(Word.id == word_id).first()
+    if word is None:
+        return False
+
+    word.is_learned = True   # 注意字段名是 is_leared
+    word.is_in_vocabulary = True   
+    session.commit()
 
 def remove_word_from_book(
     db: Session,

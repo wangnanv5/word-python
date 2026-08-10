@@ -6,7 +6,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
 
-from word_back.define import SYSTEM_DICTIONARY_VIRTUAL_ID
 from word_back.database import get_db
 from word_back.models import User
 from word_back.crud import (
@@ -17,7 +16,7 @@ from word_back.crud import (
     clone_wordbook_to_user,
     get_wordbook_words,
     get_system_book_except_user_book,
-    mark_word_as_learned
+    mark_word_as_mode
 )
 from word_back.schemas import (
     UserCreate,
@@ -30,7 +29,8 @@ from word_back.schemas import (
     WordPageResponse,
     PageMeta,
     WordBookListData,
-    MarkWordAsLearnedSchema
+    MarkWordAsLearnedSchema,
+    AddWordToVocabularySchema
 )
 from word_back.auth import (
     create_access_token,
@@ -159,18 +159,17 @@ def list_words(
     book_id: Optional[int] = Query(default=None),
     sort: Literal["spelling", "created_at"] = Query(default="spelling"),
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(get_current_user),mode=0
 ):
-    target_book_id = SYSTEM_DICTIONARY_VIRTUAL_ID if book_id is None else book_id
     try:
         user_id = user.id
         result = get_wordbook_words(
             db = db,
             user_id=user_id,
-            book_id=target_book_id,
+            book_id=book_id,
             page=page,
             page_size=page_size,
-            sort = sort
+            sort = sort,mode=mode
         )
     except PermissionError as e:
         logger.error(e)
@@ -192,49 +191,27 @@ def list_words(
         items=items,
         meta=meta,
     )
-
     return HttpResponse(code=0, data=word_page_response, message="获取单词成功")
 
-# 把指定的单词标记为已学习状态
-@app.post("/api/mark-word-as-learned",response_model=HttpResponse)
-def mark_word_as_learned_api(payload: MarkWordAsLearnedSchema,db: Session = Depends(get_db)):
-    try:
-        mark_word_as_learned(db, payload.word_id)
-        return HttpResponse(code=0,data=None,message="删除单词本成功")
-    except Exception as e:
-        logger.error(e)
-        return HttpResponse(code=-1,data=None,message="删除单词本失败")
+# # 把指定的单词标记为已学习状态
+# @app.post("/api/mark-word-as-learned",response_model=HttpResponse)
+# def mark_word_as_learned_api(payload: MarkWordAsLearnedSchema,db: Session = Depends(get_db)):
+#     try:
+#         mark_word_as_mode(db, payload.word_id,1)
+#         return HttpResponse(code=0,data=None,message="删除单词本成功")
+#     except Exception as e:
+#         logger.error(e)
+#         return HttpResponse(code=-1,data=None,message="删除单词本失败")
 
 # 把指定的单词标记为已学习状态,并且假如到生词本中
-@app.post("/api/mark-word-as-learned",response_model=HttpResponse)
-def mark_word_as_learned_api(payload: MarkWordAsLearnedSchema,db: Session = Depends(get_db)):
+@app.post("/api/change-word-status",response_model=HttpResponse)
+def add_word_in_vocabulary_book_api(payload: AddWordToVocabularySchema,db: Session = Depends(get_db)):
     try:
-        mark_word_as_learned(db, payload.word_id)
-        return HttpResponse(code=0,data=None,message="删除单词本成功")
+        mark_word_as_mode(db, payload.word_id,payload.mode)
+        return HttpResponse(code=0,data=None,message="添加成功")
     except Exception as e:
         logger.error(e)
-        return HttpResponse(code=-1,data=None,message="删除单词本失败")
-
-# # 删除单词本中的某个单词
-# @app.delete(
-#     "/api/word-books/{book_id}/words/{word_id}",
-#     response_model=HttpResponse
-# )
-# def delete_word_from_book(
-#     book_id: int,
-#     word_id: int,
-#     db: Session = Depends(get_db),
-#     current_user: User = Depends(get_current_user)
-# ):
-#     book = get_user_book_or_404(db, book_id, current_user.id)
-
-#     if not remove_word_from_book(db, book_id, word_id):
-#         raise HTTPException(
-#             status_code=status.HTTP_404_NOT_FOUND,
-#             detail="单词不存在"
-#         )
-
-#     return HttpResponse(code=0, data=None, message="删除单词成功")
+        return HttpResponse(code=-1,data=None,message="添加失败")
 
 if __name__ == "__main__":
     import uvicorn

@@ -158,7 +158,7 @@ def create_db():
 def add_system_word(json_folder_path):
     json_file_list = [f for f in Path(json_folder_path).iterdir() if f.name.endswith(".json")]
 
-    for json_file in json_file_list[2:10]:
+    for json_file in json_file_list[2:4]:
         logger.info(f"正在处理文件: {json_file}")
         import_words(json_file,1)
 

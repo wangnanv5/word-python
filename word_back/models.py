@@ -91,6 +91,10 @@ class WordBook(Base):
 # ============================================================
 # 单词主表
 # ============================================================
+# 0代表查询 is_learned为0 is_in_vocabulary:0 is_deleted:0 未学习的单词
+# 1代表查询 is_learned为1 is_in_vocabulary:0 is_deleted:0 已认识,并删除
+# 2代表查询 is_learned为1 is_in_vocabulary:1 is_deleted:0 已学习,并加入生词本
+# 3代表查询 is_learned为1 is_in_vocabulary:1 is_deleted:1 未学习,并加入生词本,并已掌握删除
 class Word(Base):
     """
     单词表
@@ -110,7 +114,10 @@ class Word(Base):
     created_at = Column(DateTime, default=_utcnow, nullable=False)
     updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow, nullable=False)
 
-    is_learned = Column(Boolean, default=False)
+    # is_learned = Column(Boolean, default=False)
+    # is_in_vocabulary = Column(Boolean, default=False)
+    # is_deleted = Column(Boolean, default=False)
+    mode = Column(Integer, nullable=False, default=0)
 
     __table_args__ = (
         # 唯一约束：拼写全局唯一，避免重复单词

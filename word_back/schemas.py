@@ -181,6 +181,11 @@ class MarkWordAsLearnedSchema(BaseModel):
     word_id: int = Field(alias="wordId")
     model_config = ConfigDict(from_attributes=True,validate_by_name=True,validate_by_alias=True)
 
+class AddWordToVocabularySchema(BaseModel):
+    word_id: int = Field(alias="wordId")
+    mode: int = Field(alias="mode")
+    model_config = ConfigDict(from_attributes=True,validate_by_name=True,validate_by_alias=True)
+
 class WordBookOut(WordBookBase):
     id: int
     model_config = ConfigDict(from_attributes=True)
