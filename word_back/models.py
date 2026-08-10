@@ -69,7 +69,7 @@ class WordBook(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Integer,ForeignKey("users.id", ondelete="CASCADE"),nullable=False,index=True)
     name = Column(String(100), nullable=False)
-    category = Column(String(20), nullable=False, default=CATEGORY_DICTIONARY)
+    category = Column(String(20), nullable=False, default=CATEGORY_VOCABULARY)
     description = Column(Text, nullable=True)
 
     created_at = Column(DateTime, default=_utcnow, nullable=False)
@@ -86,59 +86,6 @@ class WordBook(Base):
 
     def __repr__(self):
         return f"<WordBook id={self.id} name={self.name} category={self.category}>"
-
-
-# # ============================================================
-# # 系统全局词典（新增）
-# # ============================================================
-# class SystemDictionary(Base):
-#     """
-#     系统默认词典（全局唯一 / 全局共享）
-#     不属于任何用户，所有用户登录后都能看到
-#     """
-#     __tablename__ = "system_dictionary"
-
-#     id = Column(Integer, primary_key=True, autoincrement=True)
-
-#     name = Column(String(100), nullable=False, default="系统词典")
-#     description = Column(Text, nullable=True)
-
-#     # 版本号：方便后续做词典热更新 / 增量同步
-#     version = Column(Integer, default=1, nullable=False)
-
-#     created_at = Column(DateTime, default=_utcnow, nullable=False)
-#     updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow, nullable=False)
-
-#     # 反向关系
-#     entries = relationship("SystemDictionaryWord",back_populates="dictionary",cascade="all, delete-orphan")
-
-#     def __repr__(self):
-#         return f"<SystemDictionary id={self.id} name={self.name} version={self.version}>"
-
-
-# class SystemDictionaryWord(Base):
-#     """
-#     系统词典中的单词关联表
-#     一条记录 = 系统词典包含一个单词
-#     """
-#     __tablename__ = "system_dictionary_words"
-
-#     id = Column(Integer, primary_key=True, autoincrement=True)
-#     dictionary_id = Column(Integer,ForeignKey("system_dictionary.id", ondelete="CASCADE"),nullable=False,index=True)
-#     word_id = Column(Integer,ForeignKey("words.id", ondelete="CASCADE"),nullable=False,index=True)
-
-#     created_at = Column(DateTime, default=_utcnow, nullable=False)
-
-#     dictionary = relationship("SystemDictionary", back_populates="entries")
-#     word = relationship("Word")
-
-#     __table_args__ = (
-#         UniqueConstraint("dictionary_id", "word_id",name="uq_sys_dict_dictionary_word"),
-#         Index("ix_sys_dict_word_dictionary", "word_id", "dictionary_id")
-#     )
-
-#     def __repr__(self):
-#         return f"<SystemDictionaryWord dict_id={self.dictionary_id} word_id={self.word_id}>"
 
 
 # ============================================================
@@ -163,7 +110,7 @@ class Word(Base):
     created_at = Column(DateTime, default=_utcnow, nullable=False)
     updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow, nullable=False)
 
-    is_leared = Column(Boolean, default=False)
+    is_learned = Column(Boolean, default=False)
 
     __table_args__ = (
         # 唯一约束：拼写全局唯一，避免重复单词

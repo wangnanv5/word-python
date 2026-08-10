@@ -1,3 +1,4 @@
+import math
 from datetime import datetime
 from pydantic import BaseModel, Field, EmailStr, ConfigDict
 from typing import Generic, Optional, TypeVar,Literal,List, Optional, Union
@@ -94,30 +95,6 @@ class Token(BaseModel):
 
 
 # =====================
-# 单词本相关
-# =====================
-
-class WordBookBase(BaseModel):
-    name: str = Field( ..., min_length=1, max_length=100, description="单词本名称")
-    category: Literal["dictionary", "vocabulary"] = Field(
-        default="vocabulary",
-        description="dictionary: 词典, vocabulary: 生词本"
-    )
-
-    description: Optional[str] = Field(None,max_length=255,description="单词本描述")
-
-
-class WordBookCreate(WordBookBase):
-    pass
-
-
-class WordBookOut(WordBookBase):
-    id: int
-    created_at: datetime
-    updated_at: datetime
-    model_config = ConfigDict(from_attributes=True)
-
-# =====================
 # 单词相关
 # =====================
 
@@ -152,9 +129,15 @@ class PageMeta(BaseModel):
     has_prev: bool = Field(description="是否有上一页")
 
 class WordPageResponse(BaseModel):
-    """分页获取单词的响应体"""
-    items: list[WordItem] = Field(description="当前页的单词列表")
-    meta: PageMeta = Field(description="分页信息")
+    """分页结果"""
+    items: list[WordItem] = Field(default_factory=list)
+    total: int = 0
+    page: int = 1
+    page_size: int = 20
+
+    @property
+    def total_pages(self) -> int:
+        return math.ceil(self.total / self.page_size) if self.page_size > 0 else 0
 
 
 # =====================
@@ -176,3 +159,33 @@ class BookWordOut(BaseModel):
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+# =====================
+# 单词本相关
+# =====================
+
+class WordBookBase(BaseModel):
+    name: str = Field( ..., min_length=1, max_length=100, description="单词本名称")
+    category: Literal["dictionary", "vocabulary"] = Field(
+        default="vocabulary",
+        description="dictionary: 词典, vocabulary: 生词本"
+    )
+
+    description: Optional[str] = Field(None,max_length=255,description="单词本描述")
+
+class AddSystemBookToUser(BaseModel):
+    system_book_id: int = Field(alias="systemBookId")
+    model_config = ConfigDict(from_attributes=True,validate_by_name=True,validate_by_alias=True)
+
+class MarkWordAsLearnedSchema(BaseModel):
+    word_id: int = Field(alias="wordId")
+    model_config = ConfigDict(from_attributes=True,validate_by_name=True,validate_by_alias=True)
+
+class WordBookOut(WordBookBase):
+    id: int
+    model_config = ConfigDict(from_attributes=True)
+
+class WordBookListData(BaseModel):
+    """系统单词本列表数据结构（支持分页/总数统计）"""
+    items: List[WordBookOut]   # 原来的 data 数组内容
+    total: int     

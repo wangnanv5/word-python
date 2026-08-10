@@ -1,22 +1,23 @@
 import math
 from loguru import logger
 from typing import List,Optional, Literal
-from fastapi import FastAPI, Depends, HTTPException, status,Header, Query
+from fastapi import FastAPI, Depends,  status, Query
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
 
 from word_back.define import SYSTEM_DICTIONARY_VIRTUAL_ID
 from word_back.database import get_db
-from word_back.models import User, WordBook
+from word_back.models import User
 from word_back.crud import (
     create_user,
     get_user_by_username,
-    create_word_book,
+    delete_word_book,
     get_word_books_by_user,
-    get_word_book_by_id,
-    add_word_to_book,
-    get_wordbook_words
+    clone_wordbook_to_user,
+    get_wordbook_words,
+    get_system_book_except_user_book,
+    mark_word_as_learned
 )
 from word_back.schemas import (
     UserCreate,
@@ -24,19 +25,18 @@ from word_back.schemas import (
     LoginRequest,
     Token,
     UserInfo,
-    WordBookCreate,
     WordBookOut,
-    AddWordToBookRequest,
-    BookWordOut,
+    AddSystemBookToUser,
     WordPageResponse,
-    PageMeta
+    PageMeta,
+    WordBookListData,
+    MarkWordAsLearnedSchema
 )
 from word_back.auth import (
     create_access_token,
     verify_password,
     get_current_user
 )
-
 
 app = FastAPI(
     title="背单词 API",
@@ -48,31 +48,12 @@ app = FastAPI(
 # 生产环境不要随便用 *，要改成你的前端域名
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5777"], 
+    allow_origins=["http://localhost:5779"], 
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-
-# =====================
-# 工具函数
-# =====================
-
-def get_user_book_or_404(db: Session,book_id: int,user_id: int) -> WordBook:
-    """
-    获取当前用户的单词本。
-    如果不存在，或者不属于当前用户，返回 404。
-    """
-    book = get_word_book_by_id(db, book_id)
-
-    if not book or book.user_id != user_id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="单词本不存在"
-        )
-
-    return book
 
 # =====================
 # 认证接口
@@ -124,23 +105,51 @@ def get_user_info():
 # 单词本接口
 # =====================
     
-# 创建单词本
-@app.post("/api/word-books",response_model=WordBookOut,status_code=status.HTTP_201_CREATED)
-def create_book(payload: WordBookCreate,db: Session = Depends(get_db),current_user: User = Depends(get_current_user)):
-    book = create_word_book(
-        db=db,
-        user_id=current_user.id,
-        name=payload.name,
-        category=payload.category,
-        description=payload.description
-    )
-    return book
-
 # 获取当前用户的所有单词本
 @app.get("/api/word-books",response_model=HttpResponse[List[WordBookOut]])
 def list_books(db: Session = Depends(get_db),current_user: User = Depends(get_current_user)):
     all_books = get_word_books_by_user(db, current_user.id)
     return HttpResponse(code=0,data=all_books,message="获取所有单词本成功")
+
+# 获取当前用户的所有单词本 for vxe
+@app.get("/api/word-books-vxe",response_model=HttpResponse[WordBookListData])
+def list_books_vxe(db: Session = Depends(get_db),current_user: User = Depends(get_current_user)):
+    all_books = get_word_books_by_user(db, current_user.id)
+    data = WordBookListData(
+            items=[WordBookOut.model_validate(b) for b in all_books],
+            total=len(all_books)
+        )
+    return HttpResponse(code=0,data=data,message="获取所有单词本成功")
+
+# 获取所有的系统单词本 for vxe
+@app.get("/api/system-word-books-vxe",response_model=HttpResponse[WordBookListData])
+def list_books_vxe(db: Session = Depends(get_db),current_user: User = Depends(get_current_user)):
+    all_books = get_system_book_except_user_book(db,current_user.id)
+    data = WordBookListData(
+            items=[WordBookOut.model_validate(b) for b in all_books],
+            total=len(all_books)
+        )
+    return HttpResponse(code=0,data=data,message="获取系统单词本成功")
+
+# 用户添加指定的系统单词本 
+@app.post("/api/add-system-word-books-to-user",response_model=HttpResponse)
+def add_system_book_to_user(payload: AddSystemBookToUser,db: Session = Depends(get_db),current_user: User = Depends(get_current_user)):
+    try:
+        clone_wordbook_to_user(db, current_user.id,payload.system_book_id)
+        return HttpResponse(code=0,data=None,message="添加系统单词本成功")
+    except Exception as e:
+        logger.error(e)
+        return HttpResponse(code=-1,data=None,message="添加系统单词本失败")
+
+# 用户删除指定的单词本
+@app.post("/api/delete-user-book",response_model=HttpResponse)
+def add_system_book_to_user(payload: AddSystemBookToUser,db: Session = Depends(get_db),current_user: User = Depends(get_current_user)):
+    try:
+        delete_word_book(db, payload.system_book_id,current_user.id)
+        return HttpResponse(code=0,data=None,message="删除单词本成功")
+    except Exception as e:
+        logger.error(e)
+        return HttpResponse(code=-1,data=None,message="删除单词本失败")
 
 # 获取某个单词本里的所有单词
 @app.get("/api/words",response_model=HttpResponse[WordPageResponse])
@@ -153,7 +162,6 @@ def list_words(
     user: User = Depends(get_current_user),
 ):
     target_book_id = SYSTEM_DICTIONARY_VIRTUAL_ID if book_id is None else book_id
-
     try:
         user_id = user.id
         result = get_wordbook_words(
@@ -187,34 +195,46 @@ def list_words(
 
     return HttpResponse(code=0, data=word_page_response, message="获取单词成功")
 
-# 删除单词本中的某个单词
-@app.delete(
-    "/api/word-books/{book_id}/words/{word_id}",
-    response_model=HttpResponse,
-    status_code=status.HTTP_204_NO_CONTENT,
-)
-def delete_word_from_book(
-    book_id: int,
-    word_id: int,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    book = get_user_book_or_404(db, book_id, current_user.id)
+# 把指定的单词标记为已学习状态
+@app.post("/api/mark-word-as-learned",response_model=HttpResponse)
+def mark_word_as_learned_api(payload: MarkWordAsLearnedSchema,db: Session = Depends(get_db)):
+    try:
+        mark_word_as_learned(db, payload.word_id)
+        return HttpResponse(code=0,data=None,message="删除单词本成功")
+    except Exception as e:
+        logger.error(e)
+        return HttpResponse(code=-1,data=None,message="删除单词本失败")
 
-    if not remove_word_from_book(db, book_id, word_id):
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="单词不存在"
-        )
+# 把指定的单词标记为已学习状态,并且假如到生词本中
+@app.post("/api/mark-word-as-learned",response_model=HttpResponse)
+def mark_word_as_learned_api(payload: MarkWordAsLearnedSchema,db: Session = Depends(get_db)):
+    try:
+        mark_word_as_learned(db, payload.word_id)
+        return HttpResponse(code=0,data=None,message="删除单词本成功")
+    except Exception as e:
+        logger.error(e)
+        return HttpResponse(code=-1,data=None,message="删除单词本失败")
 
-    return HttpResponse(code=0, data=None, message="删除单词成功")
+# # 删除单词本中的某个单词
+# @app.delete(
+#     "/api/word-books/{book_id}/words/{word_id}",
+#     response_model=HttpResponse
+# )
+# def delete_word_from_book(
+#     book_id: int,
+#     word_id: int,
+#     db: Session = Depends(get_db),
+#     current_user: User = Depends(get_current_user)
+# ):
+#     book = get_user_book_or_404(db, book_id, current_user.id)
 
+#     if not remove_word_from_book(db, book_id, word_id):
+#         raise HTTPException(
+#             status_code=status.HTTP_404_NOT_FOUND,
+#             detail="单词不存在"
+#         )
 
-# =====================
-# 单词接口
-# =====================
-
-
+#     return HttpResponse(code=0, data=None, message="删除单词成功")
 
 if __name__ == "__main__":
     import uvicorn
