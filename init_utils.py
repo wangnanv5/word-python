@@ -2,9 +2,8 @@ import json
 import click
 from loguru import logger
 from pathlib import Path
-from typing import Iterator,Iterable
-from sqlalchemy.orm import sessionmaker,Session
-from sqlalchemy import select, and_
+from typing import Iterator
+from sqlalchemy.orm import sessionmaker
 from sqlalchemy import event
 
 from word_back.crud import create_user
@@ -151,7 +150,7 @@ def create_db():
     create_user(db,username="admin",phone="1",password="123456",email="",nickname="管理员",role="admin")
     click.echo(click.style(f"数据库创建成功", fg="green", bold=True))
 
-# uv run .\init_utils.py add-system-word
+# uv run .\init_utils.py add-system-word --json_folder_path="D:\english-vocabulary-master\json_original\json-sentence"
 # @cli.command(name="create_db") 
 @cli.command()
 @click.option("--json_folder_path",default=r"C:\Users\27321\Desktop\json-sentence")

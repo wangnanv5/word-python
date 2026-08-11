@@ -29,7 +29,6 @@ from word_back.schemas import (
     WordPageResponse,
     PageMeta,
     WordBookListData,
-    MarkWordAsLearnedSchema,
     AddWordToVocabularySchema
 )
 from word_back.auth import (
@@ -48,7 +47,8 @@ app = FastAPI(
 # 生产环境不要随便用 *，要改成你的前端域名
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5779"], 
+    # allow_origins=["http://192.168.3.170:5777"], 
+    allow_origins=["http://localhost:5777"], 
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -193,19 +193,9 @@ def list_words(
     )
     return HttpResponse(code=0, data=word_page_response, message="获取单词成功")
 
-# # 把指定的单词标记为已学习状态
-# @app.post("/api/mark-word-as-learned",response_model=HttpResponse)
-# def mark_word_as_learned_api(payload: MarkWordAsLearnedSchema,db: Session = Depends(get_db)):
-#     try:
-#         mark_word_as_mode(db, payload.word_id,1)
-#         return HttpResponse(code=0,data=None,message="删除单词本成功")
-#     except Exception as e:
-#         logger.error(e)
-#         return HttpResponse(code=-1,data=None,message="删除单词本失败")
-
 # 把指定的单词标记为已学习状态,并且假如到生词本中
 @app.post("/api/change-word-status",response_model=HttpResponse)
-def add_word_in_vocabulary_book_api(payload: AddWordToVocabularySchema,db: Session = Depends(get_db)):
+def change_word_status(payload: AddWordToVocabularySchema,db: Session = Depends(get_db)):
     try:
         mark_word_as_mode(db, payload.word_id,payload.mode)
         return HttpResponse(code=0,data=None,message="添加成功")
