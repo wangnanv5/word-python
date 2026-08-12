@@ -47,7 +47,6 @@ app = FastAPI(
 # 生产环境不要随便用 *，要改成你的前端域名
 app.add_middleware(
     CORSMiddleware,
-    # allow_origins=["http://192.168.3.170:5777"], 
     allow_origins=["http://localhost:5777"], 
     allow_credentials=True,
     allow_methods=["*"],
@@ -62,14 +61,15 @@ app.add_middleware(
 # 注册
 @app.post("/api/auth/register",response_model=HttpResponse,status_code=status.HTTP_201_CREATED)
 def register(payload: UserCreate, db: Session = Depends(get_db)):
-    exists = (db.query(User).filter( or_(User.username == payload.username)).first())
+    # exists = (db.query(User).filter( or_(User.username == payload.username)).first())
 
-    if exists:
-        return HttpResponse(code=status.HTTP_400_BAD_REQUEST,data=None, message="用户名已注册")
+    # if exists:
+    #     return HttpResponse(code=status.HTTP_400_BAD_REQUEST,data=None, message="用户名已注册")
 
-    create_user(db=db,password=payload.password,username=payload.username)
+    # create_user(db=db,password=payload.password,username=payload.username)
 
-    return HttpResponse(code=0, data=None, message="注册成功")
+    # return HttpResponse(code=0, data=None, message="注册成功")
+    return HttpResponse(code=-1, data=None, message="关闭注册功能")
 
 
 # 登录
@@ -205,5 +205,6 @@ def change_word_status(payload: AddWordToVocabularySchema,db: Session = Depends(
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("main:app", host="0.0.0.0", port=8080, reload=False)
+    # uvicorn.run("main:app", host="127.0.0.1", port=8080, reload=False)
     # uvicorn main:app --host 0.0.0.0 --port 8000 --workers 4
