@@ -95,7 +95,7 @@ def import_words(json_path: Path,user_id=None):
                 for trans in item.get('translations', []):
                     session.add(WordTranslation(
                         word_id=new_word.id,
-                        part_of_speech=trans.get('part_of_speech', ''),
+                        part_of_speech=trans.get('type', ''),
                         translation=trans.get('translation', '')
                     ))
 
@@ -140,7 +140,7 @@ def import_words(json_path: Path,user_id=None):
 def cli():
     pass
 
-# uv run .\init_utils.py create-db
+# uv run ./init_utils.py create-db
 # @cli.command(name="create_db") 
 @cli.command()
 def create_db():
@@ -150,18 +150,18 @@ def create_db():
     create_user(db,username="admin",phone="1",password="123456",email="",nickname="管理员",role="admin")
     click.echo(click.style(f"数据库创建成功", fg="green", bold=True))
 
-# uv run .\init_utils.py add-system-word --json_folder_path="D:\english-vocabulary-master\json_original\json-sentence"
+# uv run ./init_utils.py add-system-word --json_folder_path="D:\english-vocabulary-master\json_original\json-sentence"
 # @cli.command(name="create_db") 
 @cli.command()
-@click.option("--json_folder_path",default=r"C:\Users\27321\Desktop\json-sentence")
+@click.option("--json_folder_path",default=r"/root/work/data/json-sentence/")
 def add_system_word(json_folder_path):
     json_file_list = [f for f in Path(json_folder_path).iterdir() if f.name.endswith(".json")]
 
-    for json_file in json_file_list[2:4]:
+    for json_file in json_file_list:
         logger.info(f"正在处理文件: {json_file}")
         import_words(json_file,1)
 
-    click.echo(click.style(f"词典初始化成功", fg="green", bold=True))
+    # click.echo(click.style(f"词典初始化成功", fg="green", bold=True))
 
 if __name__ == "__main__":
     cli()
