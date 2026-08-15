@@ -4,7 +4,6 @@ from typing import List,Optional, Literal
 from fastapi import FastAPI, Depends,  status, Query
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
-from sqlalchemy import or_
 
 from word_back.database import get_db
 from word_back.models import User
@@ -69,7 +68,7 @@ def register(payload: UserCreate, db: Session = Depends(get_db)):
     # create_user(db=db,password=payload.password,username=payload.username)
 
     # return HttpResponse(code=0, data=None, message="注册成功")
-    return HttpResponse(code=-1, data=None, message="关闭注册功能")
+    return HttpResponse(code=-1, data=None, message="注册功能未开启")
 
 
 # 登录
@@ -155,7 +154,7 @@ def add_system_book_to_user(payload: AddSystemBookToUser,db: Session = Depends(g
 @app.get("/api/words",response_model=HttpResponse[WordPageResponse])
 def list_words(
     page: int = Query(default=1, ge=1),
-    page_size: int = Query(default=100, ge=1, le=500),
+    page_size: int = Query(default=100, ge=1, le=1000),
     book_id: Optional[int] = Query(default=None),
     sort: Literal["spelling", "created_at"] = Query(default="spelling"),
     db: Session = Depends(get_db),
@@ -174,24 +173,7 @@ def list_words(
     except PermissionError as e:
         logger.error(e)
         return HttpResponse(code=status.HTTP_403_FORBIDDEN,data=None,message="获取所有单词失败")
-
-    items = result.items
-    
-    total_pages = math.ceil(result.total / page_size) if page_size > 0 else 0
-    meta = PageMeta(
-        page=page,
-        page_size=page_size,
-        total=result.total,
-        total_pages=total_pages,
-        has_next=page < total_pages,
-        has_prev=page > 1,
-    )
-
-    word_page_response = WordPageResponse(
-        items=items,
-        meta=meta,
-    )
-    return HttpResponse(code=0, data=word_page_response, message="获取单词成功")
+    return HttpResponse(code=0, data=result, message="获取单词成功")
 
 # 把指定的单词标记为已学习状态,并且假如到生词本中
 @app.post("/api/change-word-status",response_model=HttpResponse)
@@ -205,6 +187,6 @@ def change_word_status(payload: AddWordToVocabularySchema,db: Session = Depends(
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=8080, reload=False)
+    uvicorn.run("main:app", host="0.0.0.0", port=8080, reload=True)
     # uvicorn.run("main:app", host="127.0.0.1", port=8080, reload=False)
     # uvicorn main:app --host 0.0.0.0 --port 8000 --workers 4

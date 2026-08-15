@@ -131,14 +131,7 @@ class PageMeta(BaseModel):
 class WordPageResponse(BaseModel):
     """分页结果"""
     items: list[WordItem] = Field(default_factory=list)
-    total: int = 0
-    page: int = 1
-    page_size: int = 20
-
-    @property
-    def total_pages(self) -> int:
-        return math.ceil(self.total / self.page_size) if self.page_size > 0 else 0
-
+    meta: PageMeta = Field(default_factory=PageMeta)
 
 # =====================
 # 单词本-单词关系

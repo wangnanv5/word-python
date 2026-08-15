@@ -1,12 +1,13 @@
+import math
 from typing import Optional
 from sqlalchemy import func,select,and_
 from sqlalchemy.orm import Session,selectinload
-from sqlalchemy.exc import SQLAlchemyError,IntegrityError
+from sqlalchemy.exc import SQLAlchemyError
 from pwdlib import PasswordHash
 
 from word_back.define import INIT_NICKNAME,CATEGORY_VOCABULARY,SYSTEM_DICTIONARY_ID,CATEGORY_DICTIONARY
 from word_back.models import User, WordBook, Word, BookWord
-from word_back.schemas import WordItem,WordPageResponse
+from word_back.schemas import WordItem,WordPageResponse,PageMeta
 
 # 密码加密工具
 pwd_context = PasswordHash.recommended()
@@ -300,7 +301,18 @@ def get_wordbook_words(
     words = db.execute(stmt).scalars().all()
 
     items = [word_to_view(w) for w in words]
-    return WordPageResponse(items=items, total=total, page=page, page_size=page_size)
+    total_pages = math.ceil(total / page_size) if page_size > 0 else 0
+
+    meta = PageMeta(
+        page=page,
+        page_size=page_size,
+        total=total,
+        total_pages=total_pages,
+        has_next=page < total_pages,
+        has_prev=page > 1,
+    )
+
+    return WordPageResponse(items=items, meta=meta)
 
 # =====================
 # 单词相关
