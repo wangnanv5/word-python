@@ -1,9 +1,9 @@
-import math
 from loguru import logger
-from typing import List,Optional, Literal
+from typing import Optional, Literal
 from fastapi import FastAPI, Depends,  status, Query
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
+from sqlalchemy import or_
 
 from word_back.database import get_db
 from word_back.models import User
@@ -26,7 +26,6 @@ from word_back.schemas import (
     WordBookOut,
     AddSystemBookToUser,
     WordPageResponse,
-    PageMeta,
     WordBookListData,
     AddWordToVocabularySchema
 )
@@ -60,15 +59,14 @@ app.add_middleware(
 # 注册
 @app.post("/api/auth/register",response_model=HttpResponse,status_code=status.HTTP_201_CREATED)
 def register(payload: UserCreate, db: Session = Depends(get_db)):
-    # exists = (db.query(User).filter( or_(User.username == payload.username)).first())
+    exists = (db.query(User).filter( or_(User.username == payload.username)).first())
 
-    # if exists:
-    #     return HttpResponse(code=status.HTTP_400_BAD_REQUEST,data=None, message="用户名已注册")
+    if exists:
+        return HttpResponse(code=status.HTTP_400_BAD_REQUEST,data=None, message="用户名已注册")
 
-    # create_user(db=db,password=payload.password,username=payload.username)
+    create_user(db=db,password=payload.password,username=payload.username)
 
-    # return HttpResponse(code=0, data=None, message="注册成功")
-    return HttpResponse(code=-1, data=None, message="注册功能未开启")
+    return HttpResponse(code=0, data=None, message="注册成功")
 
 
 # 登录
@@ -104,12 +102,6 @@ def get_user_info():
 # 单词本接口
 # =====================
     
-# 获取当前用户的所有单词本
-@app.get("/api/word-books",response_model=HttpResponse[List[WordBookOut]])
-def list_books(db: Session = Depends(get_db),current_user: User = Depends(get_current_user)):
-    all_books = get_word_books_by_user(db, current_user.id)
-    return HttpResponse(code=0,data=all_books,message="获取所有单词本成功")
-
 # 获取当前用户的所有单词本 for vxe
 @app.get("/api/word-books-vxe",response_model=HttpResponse[WordBookListData])
 def list_books_vxe(db: Session = Depends(get_db),current_user: User = Depends(get_current_user)):
@@ -120,7 +112,7 @@ def list_books_vxe(db: Session = Depends(get_db),current_user: User = Depends(ge
         )
     return HttpResponse(code=0,data=data,message="获取所有单词本成功")
 
-# 获取所有的系统单词本 for vxe
+# 获取所有的系统单词本,排除已有的单词本 for vxe
 @app.get("/api/system-word-books-vxe",response_model=HttpResponse[WordBookListData])
 def list_books_vxe(db: Session = Depends(get_db),current_user: User = Depends(get_current_user)):
     all_books = get_system_book_except_user_book(db,current_user.id)
@@ -142,7 +134,7 @@ def add_system_book_to_user(payload: AddSystemBookToUser,db: Session = Depends(g
 
 # 用户删除指定的单词本
 @app.post("/api/delete-user-book",response_model=HttpResponse)
-def add_system_book_to_user(payload: AddSystemBookToUser,db: Session = Depends(get_db),current_user: User = Depends(get_current_user)):
+def delete_system_book(payload: AddSystemBookToUser,db: Session = Depends(get_db),current_user: User = Depends(get_current_user)):
     try:
         delete_word_book(db, payload.system_book_id,current_user.id)
         return HttpResponse(code=0,data=None,message="删除单词本成功")
@@ -150,7 +142,7 @@ def add_system_book_to_user(payload: AddSystemBookToUser,db: Session = Depends(g
         logger.error(e)
         return HttpResponse(code=-1,data=None,message="删除单词本失败")
 
-# 获取某个单词本里的所有单词
+# 获取用户某个单词本里的所有单词
 @app.get("/api/words",response_model=HttpResponse[WordPageResponse])
 def list_words(
     page: int = Query(default=1, ge=1),
@@ -158,7 +150,7 @@ def list_words(
     book_id: Optional[int] = Query(default=None),
     sort: Literal["spelling", "created_at"] = Query(default="spelling"),
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),mode=0
+    user: User = Depends(get_current_user),mode : int = Query(default=0)
 ):
     try:
         user_id = user.id
@@ -177,9 +169,10 @@ def list_words(
 
 # 把指定的单词标记为已学习状态,并且假如到生词本中
 @app.post("/api/change-word-status",response_model=HttpResponse)
-def change_word_status(payload: AddWordToVocabularySchema,db: Session = Depends(get_db)):
+def change_word_status(payload: AddWordToVocabularySchema,db: Session = Depends(get_db),current_user: User = Depends(get_current_user)):
     try:
-        mark_word_as_mode(db, payload.word_id,payload.mode)
+        user_id = current_user.id
+        mark_word_as_mode(db,user_id, payload.word_id,payload.mode)
         return HttpResponse(code=0,data=None,message="添加成功")
     except Exception as e:
         logger.error(e)

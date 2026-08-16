@@ -17,12 +17,11 @@ from word_back.models import User
 # 生产环境一定要改成环境变量
 SECRET_KEY = os.getenv(
     "SECRET_KEY",
-    "please-change-this-secret-key-in-production"
+    "jmjnwn0608!"
 )
 
 ALGORITHM = "HS256"
 
-# token 有效期：24 小时
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 2400
 
 

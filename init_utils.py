@@ -7,8 +7,8 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy import event
 
 from word_back.crud import create_user
-from word_back.define import CATEGORY_DICTIONARY
-from word_back.database import Base, engine,SessionLocal
+from word_back.define import CATEGORY_DICTIONARY,SYSTEM_DICTIONARY_ID
+from word_back.database import Base, engine
 from word_back.models import Word, WordTranslation,WordPhrase,WordBook,BookWord
 
 def load_words(json_path: Path) -> Iterator[dict]:
@@ -146,8 +146,6 @@ def cli():
 def create_db():
     # 初始化数据库,创建空表
     Base.metadata.create_all(bind=engine)
-    db = SessionLocal()
-    create_user(db,username="admin",phone="1",password="123456",email="",nickname="管理员",role="admin")
     click.echo(click.style(f"数据库创建成功", fg="green", bold=True))
 
 # uv run ./init_utils.py add-system-word --json_folder_path="D:\english-vocabulary-master\json_original\json-sentence"
@@ -159,7 +157,7 @@ def add_system_word(json_folder_path):
 
     for json_file in json_file_list:
         logger.info(f"正在处理文件: {json_file}")
-        import_words(json_file,1)
+        import_words(json_file,SYSTEM_DICTIONARY_ID)
 
     # click.echo(click.style(f"词典初始化成功", fg="green", bold=True))
 
