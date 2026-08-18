@@ -1,8 +1,7 @@
 from loguru import logger
 from typing import Optional, Literal
-from fastapi import  Depends,  status, Query
+from fastapi import  Depends,  status, Query,APIRouter
 from sqlalchemy.orm import Session
-from fastapi import APIRouter,  Depends
 
 from word_back.database import get_db
 from word_back.models import User
@@ -23,7 +22,7 @@ router = APIRouter()
 # =====================
     
 # 获取当前用户的所有单词本 for vxe
-@router.get("/api/word-books-vxe",response_model=HttpResponse[WordBookListData])
+@router.get("/all-vxe",response_model=HttpResponse[WordBookListData])
 def get_word_books_by_user_paged_api(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -45,7 +44,7 @@ def get_word_books_by_user_paged_api(
     return HttpResponse(code=0,data=result,message="获取所有单词本成功")
 
 # 获取所有的系统单词本,排除已有的单词本 for vxe
-@router.get("/api/system-word-books-vxe",response_model=HttpResponse[WordBookListData])
+@router.get("/system-vxe",response_model=HttpResponse[WordBookListData])
 def get_system_book_except_user_book_api(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -61,27 +60,27 @@ def get_system_book_except_user_book_api(
     return HttpResponse(code=0,data=result,message="获取系统单词本成功")
 
 # 用户添加指定的系统单词本 
-@router.post("/api/add-system-word-books-to-user",response_model=HttpResponse)
+@router.post("/add",response_model=HttpResponse)
 def add_system_book_to_user(payload: AddSystemBookToUser,db: Session = Depends(get_db),current_user: User = Depends(get_current_user)):
     try:
         clone_wordbook_to_user(db, current_user.id,payload.system_book_id)
         return HttpResponse(code=0,data=None,message="添加系统单词本成功")
     except Exception as e:
         logger.error(e)
-        return HttpResponse(code=-1,data=None,message="添加系统单词本失败")
+        return HttpResponse(code=status.HTTP_500_INTERNAL_SERVER_ERROR,data=None,message="添加系统单词本失败")
 
 # 用户删除指定的单词本
-@router.post("/api/delete-user-book",response_model=HttpResponse)
+@router.post("/delete",response_model=HttpResponse)
 def delete_user_book(payload: AddSystemBookToUser,db: Session = Depends(get_db),current_user: User = Depends(get_current_user)):
     try:
         delete_word_book(db, payload.system_book_id,current_user.id)
         return HttpResponse(code=0,data=None,message="删除单词本成功")
     except Exception as e:
         logger.error(e)
-        return HttpResponse(code=-1,data=None,message="删除单词本失败")
+        return HttpResponse(code=status.HTTP_500_INTERNAL_SERVER_ERROR,data=None,message="删除单词本失败")
 
 # 获取用户某个单词本里的所有单词
-@router.get("/api/words",response_model=HttpResponse[WordPageResponse])
+@router.get("/words",response_model=HttpResponse[WordPageResponse])
 def list_words(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=100, ge=1, le=1000),
@@ -102,5 +101,5 @@ def list_words(
         )
     except PermissionError as e:
         logger.error(e)
-        return HttpResponse(code=status.HTTP_403_FORBIDDEN,data=None,message="获取所有单词失败")
+        return HttpResponse(code=status.HTTP_500_INTERNAL_SERVER_ERROR,data=None,message="获取所有单词失败")
     return HttpResponse(code=0, data=result, message="获取单词成功")

@@ -6,7 +6,7 @@ from typing import Iterator
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import event
 
-from word_back.crud import create_user
+from word_back.crud.word_crud import create_user
 from word_back.define import CATEGORY_DICTIONARY,SYSTEM_DICTIONARY_ID
 from word_back.database import Base, engine
 from word_back.models import Word, WordTranslation,WordPhrase,WordBook,BookWord,User

@@ -38,7 +38,6 @@ def register(payload: UserCreate, db: Session = Depends(get_db)):
     create_user(db=db,password=payload.password,username=payload.username)
     return HttpResponse(code=0, data=None, message="注册成功")
 
-
 # 登录
 @router.post("/login",response_model=HttpResponse[Token])
 def login(payload: LoginRequest, db: Session = Depends(get_db)):
@@ -54,6 +53,12 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
     refresh_token = create_refresh_token(user.id)
     result = Token(access_token=access_token, refresh_token=refresh_token)
     return HttpResponse(code=0,data=result,message="登录成功")
+
+# 获取用户信息
+@router.get("/info", response_model=HttpResponse)
+def get_user_info():
+    user_info = UserInfo(roles=["super"],realName = "小王")
+    return HttpResponse(data=user_info.model_dump())
 
 # 刷新 Access Token（使用 Refresh Token 换取新的 Access Token）
 @router.post("/refresh", response_model=HttpResponse[Token])
