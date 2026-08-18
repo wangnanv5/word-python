@@ -1,7 +1,8 @@
 from loguru import logger
 from typing import Optional, Literal
-from fastapi import FastAPI, Depends,  status, Query
+from fastapi import FastAPI, Depends,  status, Query, Header
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
 
@@ -19,29 +20,34 @@ from word_back.crud import (
     search_words,
     word_to_view
 )
-from word_back.schemas import (
+from word_back.schemas.word_book_schema import (
     UserCreate,
     WordItem,
     HttpResponse,
     LoginRequest,
     Token,
     UserInfo,
-    WordBookOut,
     AddSystemBookToUser,
     WordPageResponse,
     WordBookListData,
     AddWordToVocabularySchema
 )
-from word_back.auth import (
-    create_access_token,
-    verify_password,
-    get_current_user
-)
+from word_back.auth import get_current_user
+
+from word_back.routers import *
 
 app = FastAPI(
     title="背单词 API",
     description="用户、单词本、单词接口",
     version="1.0.0"
+)
+
+API_PREFIX = "/api"
+
+app.include_router(
+    auth_router.router,
+    prefix=f"{API_PREFIX}/auth",
+    tags=["Authentication"]
 )
 
 # 允许跨域
@@ -54,46 +60,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
-# =====================
-# 认证接口
-# =====================
-
-# 注册
-@app.post("/api/auth/register",response_model=HttpResponse,status_code=status.HTTP_201_CREATED)
-def register(payload: UserCreate, db: Session = Depends(get_db)):
-    exists = (db.query(User).filter( or_(User.username == payload.username)).first())
-
-    if exists:
-        return HttpResponse(code=status.HTTP_400_BAD_REQUEST,data=None, message="用户名已注册")
-
-    create_user(db=db,password=payload.password,username=payload.username)
-
-    return HttpResponse(code=0, data=None, message="注册成功")
-
-
-# 登录
-@app.post("/api/auth/login",response_model=HttpResponse[Token])
-def login(payload: LoginRequest, db: Session = Depends(get_db)):
-    user = get_user_by_username(db, payload.username)
-
-    if not user:
-        return HttpResponse(code=-1,data=None,message="此用户名未注册")
-
-    if not verify_password(payload.password, user.password_hash):
-        return HttpResponse(code=-1,data=None,message="密码错误")
-
-    access_token = create_access_token(user.id)
-
-    return HttpResponse(code=0, data={"accessToken":access_token}, message="登录成功")
-
-
-# 退出登录
-@app.post("/api/auth/logout")
-def logout():
-    return HttpResponse(code=0, data=None, message="登录成功")
-
-
 # 获取用户信息
 @app.get("/api/user/info", response_model=HttpResponse)
 def get_user_info():
@@ -101,92 +67,6 @@ def get_user_info():
     return HttpResponse(data=user_info.model_dump())
 
 
-# =====================
-# 单词本接口
-# =====================
-    
-# 获取当前用户的所有单词本 for vxe
-@app.get("/api/word-books-vxe",response_model=HttpResponse[WordBookListData])
-def get_word_books_by_user_paged_api(
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-    # ✅ 接收前端传来的分页和排序参数
-    page: int = Query(1, ge=1, description="当前页码，从1开始"),
-    page_size: int = Query(10, ge=1, le=200,alias="pageSize", description="每页条数"),
-    sort_by: str = Query(None, description="排序列名，如 name、created_at"),
-    sort_order: str = Query(None, description="排序方向：asc 或 desc"),
-):
-    books, total = get_word_books_by_user_paged(
-        db=db,
-        user_id=current_user.id,
-        page=page,
-        page_size=page_size,
-        sort_by=sort_by,
-        sort_order=sort_order,
-    )
-    result = WordBookListData(items=books, total=total)
-    return HttpResponse(code=0,data=result,message="获取所有单词本成功")
-
-# 获取所有的系统单词本,排除已有的单词本 for vxe
-@app.get("/api/system-word-books-vxe",response_model=HttpResponse[WordBookListData])
-def get_system_book_except_user_book_api(
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-    page: int = Query(1, ge=1, description="当前页码，从1开始"),
-    page_size: int = Query(10, ge=1, le=200,alias="pageSize", description="每页条数"),
-    sort_by: str = Query(None, description="排序列名，如 name、created_at"),
-    sort_order: str = Query(None, description="排序方向：asc 或 desc"),
-):
-    books, total = get_system_book_except_user_book_paged(
-        db, current_user.id, page, page_size, sort_by, sort_order
-    )
-    result = WordBookListData(items=books, total=total)
-    return HttpResponse(code=0,data=result,message="获取系统单词本成功")
-
-# 用户添加指定的系统单词本 
-@app.post("/api/add-system-word-books-to-user",response_model=HttpResponse)
-def add_system_book_to_user(payload: AddSystemBookToUser,db: Session = Depends(get_db),current_user: User = Depends(get_current_user)):
-    try:
-        clone_wordbook_to_user(db, current_user.id,payload.system_book_id)
-        return HttpResponse(code=0,data=None,message="添加系统单词本成功")
-    except Exception as e:
-        logger.error(e)
-        return HttpResponse(code=-1,data=None,message="添加系统单词本失败")
-
-# 用户删除指定的单词本
-@app.post("/api/delete-user-book",response_model=HttpResponse)
-def delete_system_book(payload: AddSystemBookToUser,db: Session = Depends(get_db),current_user: User = Depends(get_current_user)):
-    try:
-        delete_word_book(db, payload.system_book_id,current_user.id)
-        return HttpResponse(code=0,data=None,message="删除单词本成功")
-    except Exception as e:
-        logger.error(e)
-        return HttpResponse(code=-1,data=None,message="删除单词本失败")
-
-# 获取用户某个单词本里的所有单词
-@app.get("/api/words",response_model=HttpResponse[WordPageResponse])
-def list_words(
-    page: int = Query(default=1, ge=1),
-    page_size: int = Query(default=100, ge=1, le=1000),
-    book_id: Optional[int] = Query(default=None),
-    sort: Literal["spelling", "created_at"] = Query(default="spelling"),
-    db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),mode : int = Query(default=0)
-):
-    try:
-        user_id = user.id
-        result = get_wordbook_words(
-            db = db,
-            user_id=user_id,
-            book_id=book_id,
-            page=page,
-            page_size=page_size,
-            sort = sort,mode=mode
-        )
-    except PermissionError as e:
-        logger.error(e)
-        return HttpResponse(code=status.HTTP_403_FORBIDDEN,data=None,message="获取所有单词失败")
-    return HttpResponse(code=0, data=result, message="获取单词成功")
 
 # 把指定的单词标记为已学习状态,并且假如到生词本中
 @app.post("/api/change-word-status",response_model=HttpResponse)

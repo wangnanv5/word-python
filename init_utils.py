@@ -11,15 +11,6 @@ from word_back.define import CATEGORY_DICTIONARY,SYSTEM_DICTIONARY_ID
 from word_back.database import Base, engine
 from word_back.models import Word, WordTranslation,WordPhrase,WordBook,BookWord,User
 
-def load_words(json_path: Path) -> Iterator[dict]:
-    with open(json_path, "r", encoding="utf-8") as f:
-        data = json.load(f)
-
-    if not isinstance(data, list):
-        raise ValueError(f"JSON 顶层结构应为 list 或含 list 字段的 dict，实际为 {type(data)}")
-
-    for item in data:
-        yield item
 
 # SQLite 性能优化参数
 @event.listens_for(engine, "connect")

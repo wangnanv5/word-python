@@ -6,7 +6,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from word_back.define import INIT_NICKNAME,CATEGORY_VOCABULARY,SYSTEM_DICTIONARY_ID,CATEGORY_DICTIONARY
 from word_back.models import User, WordBook, Word, BookWord,UserWordProgress
-from word_back.schemas import WordItem,WordPageResponse,PageMeta
+from word_back.schemas.word_book_schema import WordItem,WordPageResponse,PageMeta
 from word_back.auth import pwd_context
 
 # =====================
