@@ -6,7 +6,6 @@ from sqlalchemy.orm import Session,selectinload
 from word_back.models import  WordBook, Word, BookWord,UserWordProgress
 from word_back.schemas import WordItem,WordPageResponse,PageMeta
 
-
 # =====================
 # 单词相关
 # =====================
@@ -171,75 +170,28 @@ def get_wordbook_words(
 
     return WordPageResponse(items=items, meta=meta)
 
-def copy_word_to_book(
-    session: Session,
-    source_book_id: int,
-    word_id: int,
-    target_book_id: int,
-) -> None:
-    """
-    将 source_book 中的某个 word 复制进 target_book。
-
-    :raises ValueError:   源 book 与目标 book 相同
-    :raises LookupError:  源 book 中不存在该 word，或目标 book 不存在
-    """
-    # 1. 基本参数校验
-    if source_book_id == target_book_id:
-        raise ValueError("源单词本和目标单词本不能相同")
-
-    # 2. 确认源 book 中确实存在该 word
-    src_link = session.scalar(
-        select(BookWord).where(
-            BookWord.book_id == source_book_id,
-            BookWord.word_id == word_id,
-        )
-    )
-    if src_link is None:
-        raise LookupError(f"word {word_id} 不在源单词本 {source_book_id} 中")
-
-    # 3. 确认目标 book 存在
-    target_book = session.scalar(
-        select(WordBook).where(WordBook.id == target_book_id)
-    )
-    if target_book is None:
-        raise LookupError(f"目标单词本 {target_book_id} 不存在")
-
-    # 4. 幂等：目标 book 已包含该 word 则直接返回
-    existing = session.scalar(
-        select(BookWord).where(
-            BookWord.book_id == target_book_id,
-            BookWord.word_id == word_id,
-        )
-    )
-    if existing is not None:
-        return existing
-
-    # 5. 插入新关联
-    new_link = BookWord(book_id=target_book_id, word_id=word_id)
-    session.add(new_link)
-    session.commit()
-    session.refresh(new_link)
-
 def mark_word_as_mode(session: Session, user_id: int, word_id: int, mode: int) -> None:
     """
     根据 user_id 和 word_id 将该单词在用户名下标记为指定学习状态
     
     :param session: SQLAlchemy Session
-    :param user_id: 用户 ID（新增）
+    :param user_id: 用户 ID
     :param word_id: 单词 ID
     :param mode: 学习状态 (0-未学习 1-已认识 2-学习中 3-已掌握)
-    :return: 是否成功（False 表示未找到该单词）
     """
-    # 1. 检查单词是否存在（保持原函数的语义）
-    word_exists = session.query(Word.id).filter(Word.id == word_id).scalar() is not None
+    # 1. 检查单词是否存在（使用 SQLAlchemy 2.0 的 select 语法）
+    word_exists = session.get(Word, word_id) is not None
+    
     if not word_exists:
-        return 
+        raise ValueError(f"单词 {word_id} 不存在")
 
     # 2. 查找该用户对该单词的进度记录
-    progress = session.query(UserWordProgress).filter_by(
-        user_id=user_id,
-        word_id=word_id
-    ).first()
+    progress = session.execute(
+        select(UserWordProgress).where(
+            UserWordProgress.user_id == user_id,
+            UserWordProgress.word_id == word_id
+        )
+    ).scalar_one_or_none()
 
     if progress is None:
         # 3a. 没有记录 → 新建（利用唯一约束保证安全）
@@ -250,6 +202,7 @@ def mark_word_as_mode(session: Session, user_id: int, word_id: int, mode: int) -
         )
         session.add(progress)
     else:
+        # 3b. 有记录 → 更新状态
         progress.status = mode
 
     session.commit()

@@ -315,7 +315,6 @@ def clone_wordbook_to_user(db: Session, target_user_id: int, system_book_id: int
     ).first()
 
     if existing:
-        # 建议用更具体的异常，方便上层捕获处理
         raise ValueError("该用户名下已存在同名的单词本")
 
     # 2. 创建属于该用户的新单词本
