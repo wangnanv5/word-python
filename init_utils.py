@@ -9,7 +9,7 @@ from sqlalchemy import event
 from word_back.crud import create_user
 from word_back.define import CATEGORY_DICTIONARY,SYSTEM_DICTIONARY_ID
 from word_back.database import Base, engine
-from word_back.models import Word, WordTranslation,WordPhrase,WordBook,BookWord
+from word_back.models import Word, WordTranslation,WordPhrase,WordBook,BookWord,User
 
 def load_words(json_path: Path) -> Iterator[dict]:
     with open(json_path, "r", encoding="utf-8") as f:
@@ -146,6 +146,30 @@ def cli():
 def create_db():
     # 初始化数据库,创建空表
     Base.metadata.create_all(bind=engine)
+
+    # 系统词典借用 user_id=SYSTEM_DICTIONARY_ID(1) 存储，但外键要求 users 表中必须存在该记录。
+    # 这里显式插入一条系统用户，避免 add_system_word 插入 word_books 时触发
+    # FOREIGN KEY constraint failed。
+    Session = sessionmaker(bind=engine)
+    session = Session()
+    if not session.get(User, SYSTEM_DICTIONARY_ID):
+        from word_back.auth import pwd_context
+        from word_back.define import INIT_PASSWORD
+        system_user = User(
+            id=SYSTEM_DICTIONARY_ID,
+            username="__system__",
+            password_hash=pwd_context.hash(INIT_PASSWORD),
+            nickname="system",
+            role="system",
+            is_active=True,
+        )
+        session.add(system_user)
+        session.commit()
+        click.echo(click.style(f"已创建系统用户 id={SYSTEM_DICTIONARY_ID}", fg="green"))
+    else:
+        click.echo(f"系统用户 id={SYSTEM_DICTIONARY_ID} 已存在，跳过")
+    session.close()
+
     click.echo(click.style(f"数据库创建成功", fg="green", bold=True))
 
 # uv run ./init_utils.py add-system-word --json_folder_path="D:\english-vocabulary-master\json_original\json-sentence"

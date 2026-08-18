@@ -11,14 +11,17 @@ from word_back.crud import (
     create_user,
     get_user_by_username,
     delete_word_book,
-    get_word_books_by_user,
+    get_word_books_by_user_paged,
     clone_wordbook_to_user,
     get_wordbook_words,
-    get_system_book_except_user_book,
-    mark_word_as_mode
+    get_system_book_except_user_book_paged,
+    mark_word_as_mode,
+    search_words,
+    word_to_view
 )
 from word_back.schemas import (
     UserCreate,
+    WordItem,
     HttpResponse,
     LoginRequest,
     Token,
@@ -104,23 +107,41 @@ def get_user_info():
     
 # 获取当前用户的所有单词本 for vxe
 @app.get("/api/word-books-vxe",response_model=HttpResponse[WordBookListData])
-def list_books_vxe(db: Session = Depends(get_db),current_user: User = Depends(get_current_user)):
-    all_books = get_word_books_by_user(db, current_user.id)
-    data = WordBookListData(
-            items=[WordBookOut.model_validate(b) for b in all_books],
-            total=len(all_books)
-        )
-    return HttpResponse(code=0,data=data,message="获取所有单词本成功")
+def get_word_books_by_user_paged_api(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    # ✅ 接收前端传来的分页和排序参数
+    page: int = Query(1, ge=1, description="当前页码，从1开始"),
+    page_size: int = Query(10, ge=1, le=200,alias="pageSize", description="每页条数"),
+    sort_by: str = Query(None, description="排序列名，如 name、created_at"),
+    sort_order: str = Query(None, description="排序方向：asc 或 desc"),
+):
+    books, total = get_word_books_by_user_paged(
+        db=db,
+        user_id=current_user.id,
+        page=page,
+        page_size=page_size,
+        sort_by=sort_by,
+        sort_order=sort_order,
+    )
+    result = WordBookListData(items=books, total=total)
+    return HttpResponse(code=0,data=result,message="获取所有单词本成功")
 
 # 获取所有的系统单词本,排除已有的单词本 for vxe
 @app.get("/api/system-word-books-vxe",response_model=HttpResponse[WordBookListData])
-def list_books_vxe(db: Session = Depends(get_db),current_user: User = Depends(get_current_user)):
-    all_books = get_system_book_except_user_book(db,current_user.id)
-    data = WordBookListData(
-            items=[WordBookOut.model_validate(b) for b in all_books],
-            total=len(all_books)
-        )
-    return HttpResponse(code=0,data=data,message="获取系统单词本成功")
+def get_system_book_except_user_book_api(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    page: int = Query(1, ge=1, description="当前页码，从1开始"),
+    page_size: int = Query(10, ge=1, le=200,alias="pageSize", description="每页条数"),
+    sort_by: str = Query(None, description="排序列名，如 name、created_at"),
+    sort_order: str = Query(None, description="排序方向：asc 或 desc"),
+):
+    books, total = get_system_book_except_user_book_paged(
+        db, current_user.id, page, page_size, sort_by, sort_order
+    )
+    result = WordBookListData(items=books, total=total)
+    return HttpResponse(code=0,data=result,message="获取系统单词本成功")
 
 # 用户添加指定的系统单词本 
 @app.post("/api/add-system-word-books-to-user",response_model=HttpResponse)
@@ -177,6 +198,35 @@ def change_word_status(payload: AddWordToVocabularySchema,db: Session = Depends(
     except Exception as e:
         logger.error(e)
         return HttpResponse(code=-1,data=None,message="添加失败")
+
+# 模糊查找 Word 单词（按拼写部分匹配）
+@app.get("/api/words/search", response_model=HttpResponse[list[WordItem]])
+def search_words_route(
+    q: str = Query(default="", description="查询关键词"),
+    limit: int = Query(default=10, ge=1, le=100, description="返回数量"),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user)
+):
+    # 1. 输入校验：去空格、判空
+    keyword = (q or "").strip()
+    if not keyword:
+        return HttpResponse(code=0, data=[], message="查询成功（空关键词返回空列表）")
+
+    try:
+        # 2. 模糊匹配查询
+        words = search_words(db=db, keyword=keyword, limit=limit)
+    except Exception as e:
+        logger.error(e)
+        return HttpResponse(code=-1, data=None, message="搜索单词失败")
+
+    # 3. 转为 WordItem 列表（为空时返回空列表而非报错）
+    if not words:
+        return HttpResponse(code=0, data=[], message="未找到匹配的单词")
+
+    items = [word_to_view(w) for w in words]
+    return HttpResponse(code=0, data=items, message="搜索单词成功")
+
+
 
 if __name__ == "__main__":
     import uvicorn

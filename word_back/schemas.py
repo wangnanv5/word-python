@@ -174,6 +174,7 @@ class AddWordToVocabularySchema(BaseModel):
 class WordBookOut(BaseModel):
     id: int
     name: str = Field( ..., min_length=1, max_length=100, description="单词本名称")
+    unlearned_count : int 
     category: Literal["dictionary", "vocabulary"] = Field(
         default="vocabulary",
         description="dictionary: 词典, vocabulary: 生词本"
@@ -184,5 +185,13 @@ class WordBookOut(BaseModel):
 
 class WordBookListData(BaseModel):
     """系统单词本列表数据结构（支持分页/总数统计）"""
-    items: List[WordBookOut]   # 原来的 data 数组内容
-    total: int     
+    items: List[WordBookOut]
+    total: int
+
+    # @classmethod
+    # def from_books(cls, books: list) -> "WordBookListData":
+    #     """直接从 ORM 对象列表构建，路由里无需手动赋值"""
+    #     return cls(
+    #         items=[WordBookOut.model_validate(b) for b in books],
+    #         total=len(books)
+    #     )
