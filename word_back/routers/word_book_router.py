@@ -13,7 +13,7 @@ from word_back.crud import (
     get_system_book_except_user_book_paged
 )
 from word_back.auth import get_current_user
-from word_back.schemas import *
+from word_back.schemas import AddSystemBookToUser, HttpResponse, WordBookListData, WordPageResponse
 
 router = APIRouter()
 

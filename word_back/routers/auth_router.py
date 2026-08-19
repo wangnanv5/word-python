@@ -11,7 +11,7 @@ from word_back.crud import (
     create_user,
     get_user_by_username,
 )
-from word_back.schemas import *
+from word_back.schemas import HttpResponse, LoginRequest, Token, UserCreate, UserInfo
 from word_back.auth import (
     bearer_scheme,
     create_access_token,

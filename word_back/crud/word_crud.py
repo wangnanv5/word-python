@@ -4,7 +4,7 @@ from sqlalchemy import func,select,and_,or_
 from sqlalchemy.orm import Session,selectinload
 
 from word_back.models import  WordBook, Word, BookWord,UserWordProgress
-from word_back.schemas import WordItem,WordPageResponse,PageMeta
+from word_back.schemas.word_schema import PageMeta, WordItem, WordPageResponse
 
 # =====================
 # 单词相关

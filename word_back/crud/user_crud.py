@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from word_back.define import INIT_NICKNAME
 from word_back.models import User
 from word_back.auth import pwd_context
-from word_back.crud import create_word_book
+from word_back.crud.word_book_crud import create_word_book
 
 # =====================
 # 用户相关

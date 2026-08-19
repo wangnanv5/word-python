@@ -9,7 +9,7 @@ from word_back.crud import (
     search_words,
     word_to_view
 )
-from word_back.schemas import *
+from word_back.schemas import AddWordToVocabularySchema, HttpResponse, WordItem
 from word_back.auth import get_current_user
 
 router = APIRouter()

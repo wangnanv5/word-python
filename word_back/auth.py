@@ -1,8 +1,7 @@
-import os
 import uuid
 from datetime import datetime, timedelta, timezone
 from enum import Enum
-from typing import Optional, Literal
+from typing import Optional
 
 from jose import jwt, JWTError
 from pwdlib import PasswordHash
@@ -28,7 +27,7 @@ if not SECRET_KEY:
 ALGORITHM = "HS256"
 
 # Access Token：短期有效，用于普通接口鉴权
-ACCESS_TOKEN_EXPIRE_MINUTES = 0.1
+ACCESS_TOKEN_EXPIRE_MINUTES = 10
 # Refresh Token：长期有效，仅用于换取新的 Access Token
 REFRESH_TOKEN_EXPIRE_DAYS = 7
 

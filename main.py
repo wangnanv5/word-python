@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from word_back.routers import *
+from word_back.routers import auth_router, word_book_router, word_router
 
 app = FastAPI(
     title="背单词 API",
