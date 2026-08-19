@@ -191,8 +191,6 @@ def get_user_from_refresh_token(
         )
     return user
 
-# 用于从标准 Authorization: Bearer <token> 提取 access token
-bearer_scheme = HTTPBearer(auto_error=False)
 def revoke_if_valid(raw_token: str) -> None:
     """尝试解码 token 并将 jti 加入黑名单，解码失败则忽略。"""
     try:

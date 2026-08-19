@@ -10,7 +10,7 @@ from word_back.crud import (
     get_word_books_by_user_paged,
     clone_wordbook_to_user,
     get_wordbook_words,
-    get_system_book_except_user_book_paged,
+    get_system_book_except_user_book_paged
 )
 from word_back.auth import get_current_user
 from word_back.schemas import *
@@ -26,7 +26,6 @@ router = APIRouter()
 def get_word_books_by_user_paged_api(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    # ✅ 接收前端传来的分页和排序参数
     page: int = Query(1, ge=1, description="当前页码，从1开始"),
     page_size: int = Query(10, ge=1, le=200,alias="pageSize", description="每页条数"),
     sort_by: str = Query(None, description="排序列名，如 name、created_at"),

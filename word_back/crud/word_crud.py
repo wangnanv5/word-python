@@ -31,7 +31,7 @@ def word_to_view(word: Word, status: int = 0) -> WordItem:
             {"phrase": p.phrase, "translation": p.translation}
             for p in word.phrases
         ],
-        status=status  # 传入学习状态
+        status=status  
     )
 
 # 获取一个单词本中的所有单词 支持分页
@@ -59,6 +59,7 @@ def get_wordbook_words(
     # ========== 构建基础查询 ==========
     if book_id is None:
         # ---- 场景1：查该用户所有状态为 mode 的单词（不限单词本）----
+        # 作用：获取用户所有未背的单词、已掌握单词
         base_stmt = (
             select(Word)
             .outerjoin(  # 用 outerjoin 兼容"未学习且无进度记录"的情况
@@ -124,7 +125,7 @@ def get_wordbook_words(
     count_stmt = select(func.count()).select_from(base_stmt.subquery())
     total = db.execute(count_stmt).scalar_one()
 
-    # ========== 分页 + 预加载关联数据 ==========
+    # ========== 分页 + 预加载关联数据 ====
     stmt = (
         base_stmt
         .options(
@@ -153,7 +154,6 @@ def get_wordbook_words(
     items = []
     for w in words:
         view = word_to_view(w)
-        # 如果 word_to_view 返回的字典/对象可以附加字段，把 status 带上
         view.status = progresses.get(w.id, 0)  # 没有记录默认0（未学习）
         items.append(view)
 
@@ -179,7 +179,7 @@ def mark_word_as_mode(session: Session, user_id: int, word_id: int, mode: int) -
     :param word_id: 单词 ID
     :param mode: 学习状态 (0-未学习 1-已认识 2-学习中 3-已掌握)
     """
-    # 1. 检查单词是否存在（使用 SQLAlchemy 2.0 的 select 语法）
+    # 1. 检查单词是否存在
     word_exists = session.get(Word, word_id) is not None
     
     if not word_exists:
